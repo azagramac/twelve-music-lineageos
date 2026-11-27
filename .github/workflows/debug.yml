@@ -1,0 +1,232 @@
+name: 🔨 build apk debug
+
+on:
+  push:
+    branches-ignore:
+      - main
+      - master
+    paths-ignore:
+      - "README.md"
+      - "PRIVACY.md"
+      - "LICENSE"
+      - "LICENSES/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  debug-release:
+    name: 🤖 Build & Publish debug
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: ☕ Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: 🤖 Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0"
+
+      # Twelve uses AGP 9 + Gradle 9.3.1 (gradle/wrapper), so the wrapper is used
+      # instead of pinning a Gradle version.
+      - name: 🐘 Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
+
+      - name: 🔐 Prepare Debug Signing Keystore
+        env:
+          KEYSTORE_DEBUG_B64: ${{ secrets.ANDROID_KEYSTORE_DEBUG_BASE64 }}
+          KEYSTORE_FALLBACK_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          B64="${KEYSTORE_DEBUG_B64:-$KEYSTORE_FALLBACK_B64}"
+          if [ -z "$B64" ]; then
+            echo "::error::❌ Missing ANDROID_KEYSTORE_DEBUG_BASE64 (or KEYSTORE_BASE64) secret in GitHub Secrets."
+            exit 1
+          fi
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::❌ Missing KEYSTORE_PASSWORD secret in GitHub Secrets."
+            exit 1
+          fi
+          JKS="$RUNNER_TEMP/debug.jks"
+          echo "$B64" | base64 -d > "$JKS"
+          chmod 600 "$JKS"
+          echo "KEYSTORE_FILE=$JKS" >> "$GITHUB_ENV"
+          if [ -z "$KEY_ALIAS" ] || ! keytool -list -keystore "$JKS" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            DETECTED_ALIAS=$(keytool -list -keystore "$JKS" -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | grep -i "PrivateKeyEntry" | head -n1 | cut -d',' -f1)
+            if [ -n "$DETECTED_ALIAS" ]; then
+              echo "::add-mask::$DETECTED_ALIAS"
+              echo "KEY_ALIAS=$DETECTED_ALIAS" >> "$GITHUB_ENV"
+            fi
+          fi
+          echo "✅ Debug keystore loaded from GitHub Secrets."
+
+      - name: 🛠️ Build Debug APK
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ env.KEY_ALIAS || secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          VERSION="0.1.0"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          ./gradlew assembleDebug -PversionName="$VERSION" -PversionCode="${{ github.run_number }}" --stacktrace
+
+      - name: 📦 Prepare Debug Artifacts & SHA-256 Checksums
+        run: |
+          mkdir -p dist
+          SRC=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
+          cp "$SRC" "dist/Twelve-debug-${VERSION}-${{ github.run_number }}.apk"
+          cd dist
+          for apk in *.apk; do
+            sha256sum "$apk" > "$apk.sha256"
+          done
+          ls -lh
+
+      - name: 📊 Generate Build & Test Summary
+        if: always()
+        run: |
+          APK_FILE=$(ls dist/*.apk 2>/dev/null | head -n 1)
+          APK_NAME=$([ -n "$APK_FILE" ] && basename "$APK_FILE" || echo "N/A")
+          APK_SIZE=$([ -n "$APK_FILE" ] && du -h "$APK_FILE" | cut -f1 || echo "N/A")
+          APK_SHA256=$([ -n "$APK_FILE" ] && sha256sum "$APK_FILE" | cut -d' ' -f1 || echo "N/A")
+
+          {
+            echo "### 🤖 Twelve Debug Build Summary"
+            echo "| Field | Value |"
+            echo "| :--- | :--- |"
+            echo "| 🌿 **Branch** | \`${{ github.ref_name }}\` |"
+            echo "| 📦 **Artifact** | \`$APK_NAME\` |"
+            echo "| 📏 **Size** | \`$APK_SIZE\` |"
+            echo "| 🔢 **Version Code** | \`${{ github.run_number }}\` |"
+            echo "| 🔑 **Signing** | 🔐 Debug Keystore |"
+            echo "| 🔒 **SHA-256** | \`$APK_SHA256\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 🧹 Clean up Keystore from Runner
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/debug.jks" ]; then
+            shred -u -z "$RUNNER_TEMP/debug.jks" 2>/dev/null || rm -f "$RUNNER_TEMP/debug.jks"
+          fi
+          echo "KEYSTORE_FILE=" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=" >> "$GITHUB_ENV"
+
+      - name: 📲 Send Debug APK to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_DEBUG }}
+          REPO_URL: https://github.com/${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_NUM: ${{ github.run_number }}
+          COMMIT_SHA: ${{ github.sha }}
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        run: |
+          APK_FILE=$(ls dist/*.apk | head -n 1)
+          APK_NAME=$(basename "$APK_FILE")
+          APK_SIZE=$(du -h "$APK_FILE" | cut -f1)
+          APK_SHA256=$(cut -d' ' -f1 "${APK_FILE}.sha256" 2>/dev/null || sha256sum "$APK_FILE" | cut -d' ' -f1)
+
+          git fetch --tags --force || true
+          PREV_COMMIT=$(git rev-list -n 1 testing 2>/dev/null || true)
+          if [ -n "$PREV_COMMIT" ] && [ "$PREV_COMMIT" != "$COMMIT_SHA" ]; then
+            RANGE="${PREV_COMMIT}..HEAD"
+          else
+            RANGE="-n 10 HEAD"
+          fi
+
+          CAPTION_FILE="$RUNNER_TEMP/tg_caption.html"
+          python3 - "$RANGE" "$APK_NAME" "$APK_SIZE" "$APK_SHA256" > "$CAPTION_FILE" << 'EOF'
+          import html
+          import os
+          import re
+          import subprocess
+          import sys
+
+          git_range, apk_name, apk_size, apk_sha256 = sys.argv[1:5]
+          repo_url = os.environ["REPO_URL"]
+          version = os.environ.get("VERSION", "0.1.0")
+          run_num = os.environ["RUN_NUM"]
+          branch = html.escape(os.environ["BRANCH"])
+
+          cmd = ["git", "log"] + git_range.split() + ["--no-merges", "--pretty=format:%H|%h|%s|%b%x1e"]
+          raw = subprocess.check_output(cmd, text=True, errors="replace")
+
+          commit_lines = []
+          issues = set()
+          for entry in raw.split("\x1e"):
+              entry = entry.strip()
+              if not entry:
+                  continue
+              parts = entry.split("|", 3)
+              full_sha, short_sha = parts[0], parts[1]
+              subj = html.escape(parts[2] if len(parts) > 2 else "")
+              body = parts[3] if len(parts) > 3 else ""
+              if len(subj) > 65:
+                  subj = subj[:62] + "..."
+              commit_lines.append(f"• <a href=\"{repo_url}/commit/{full_sha}\">{short_sha}</a> {subj}")
+              for m in re.findall(r"#(\d+)", f"{parts[2] if len(parts) > 2 else ''}\n{body}"):
+                  issues.add(int(m))
+
+          header = (
+              f"🧪 <b>[DEBUG] Twelve Testing</b>\n"
+              f"🏷 <b>Versión:</b> <code>v{version}</code> · <b>Build:</b> <code>#{run_num}</code>\n"
+              f"🌿 <b>Rama:</b> <code>{branch}</code>\n"
+              f"📦 <b>APK:</b> <code>{html.escape(apk_name)}</code> ({apk_size})\n"
+              f"🔒 <b>SHA-256:</b> <code>{apk_sha256[:16]}...</code>"
+          )
+
+          issues_block = ""
+          if issues:
+              links = ", ".join(f"<a href=\"{repo_url}/issues/{n}\">#{n}</a>" for n in sorted(issues))
+              issues_block = f"\n\n📋 <b>Issues:</b> {links}"
+
+          commits_block = ""
+          if commit_lines:
+              commits_block = "\n\n📝 <b>Commits:</b>\n"
+              for line in commit_lines[:8]:
+                  if len(header) + len(issues_block) + len(commits_block) + len(line) + 20 > 1000:
+                      commits_block += "• ..."
+                      break
+                  commits_block += line + "\n"
+
+          print((header + issues_block + commits_block).strip()[:1024])
+          EOF
+
+          RESP_FILE="$RUNNER_TEMP/tg_resp.json"
+          HTTP_CODE=$(curl -sS --http1.1 --connect-timeout 15 --max-time 120 \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            -o "$RESP_FILE" -w "%{http_code}" -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "document=@${APK_FILE}" \
+            -F "parse_mode=HTML" \
+            -F "caption=<${CAPTION_FILE}")
+          rm -f "$CAPTION_FILE"
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::warning::⚠️ Telegram upload failed with HTTP status $HTTP_CODE: $(cat "$RESP_FILE" 2>/dev/null)"
+            rm -f "$RESP_FILE"
+            exit 1
+          fi
+          rm -f "$RESP_FILE"
+
+      - name: 🔒 Final Runner Secret & Workspace Cleanup
+        if: always()
+        run: |
+          rm -rf dist "$RUNNER_TEMP"/*.jks
