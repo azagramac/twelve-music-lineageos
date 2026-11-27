@@ -1,0 +1,287 @@
+name: 🚀 build apk release
+
+on:
+  pull_request:
+    branches:
+      - lineage-24.0
+    types:
+      - closed
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  release:
+    name: 📦 Build & Publish Release
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'develop'
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 🏷️ Resolve Release Version
+        run: |
+          V="0.1.${{ github.run_number }}"
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          echo "TAG=v$V" >> "$GITHUB_ENV"
+          echo "📌 Resolved version: v$V"
+
+      - name: ☕ Set up Java 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: 🤖 Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0"
+
+      # Twelve uses AGP 9 + Gradle 9.3.1 (gradle/wrapper), so the wrapper is used
+      # instead of pinning a Gradle version.
+      - name: 🐘 Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          build-scan-publish: true
+          build-scan-terms-of-use-url: "https://gradle.com/help/legal-terms-of-use"
+          build-scan-terms-of-use-agree: "yes"
+
+      - name: 🔐 Prepare Release Signing Keystore
+        env:
+          KEYSTORE_RELEASE_B64: ${{ secrets.ANDROID_KEYSTORE_RELEASE_BASE64 }}
+          KEYSTORE_FALLBACK_B64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        run: |
+          B64="${KEYSTORE_RELEASE_B64:-$KEYSTORE_FALLBACK_B64}"
+          if [ -z "$B64" ]; then
+            echo "::error::❌ Missing ANDROID_KEYSTORE_RELEASE_BASE64 (or KEYSTORE_BASE64) secret in GitHub Secrets."
+            exit 1
+          fi
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::❌ Missing KEYSTORE_PASSWORD secret in GitHub Secrets."
+            exit 1
+          fi
+          JKS="$RUNNER_TEMP/release.jks"
+          echo "$B64" | base64 -d > "$JKS"
+          chmod 600 "$JKS"
+          echo "KEYSTORE_FILE=$JKS" >> "$GITHUB_ENV"
+          if [ -z "$KEY_ALIAS" ] || ! keytool -list -keystore "$JKS" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+            DETECTED_ALIAS=$(keytool -list -keystore "$JKS" -storepass "$KEYSTORE_PASSWORD" 2>/dev/null | grep -i "PrivateKeyEntry" | head -n1 | cut -d',' -f1)
+            if [ -n "$DETECTED_ALIAS" ]; then
+              echo "::add-mask::$DETECTED_ALIAS"
+              echo "KEY_ALIAS=$DETECTED_ALIAS" >> "$GITHUB_ENV"
+            fi
+          fi
+          echo "✅ Production keystore loaded from GitHub Secrets."
+
+      # Twelve has no unit tests, so lint is the only check. It is non-blocking
+      # because upstream lint warnings should not stop a release.
+      - name: 🔍 Run Release Lint Check
+        continue-on-error: true
+        run: ./gradlew lintRelease --stacktrace
+
+      - name: 🛠️ Build Release APK & AAB
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ env.KEY_ALIAS || secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew assembleRelease bundleRelease -PversionName="$VERSION" -PversionCode="${{ github.run_number }}" --stacktrace
+
+      - name: 📦 Prepare Release Artifacts & SHA-256 Checksums
+        run: |
+          mkdir -p dist
+          APK_SRC=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+          AAB_SRC=$(ls app/build/outputs/bundle/release/*.aab | head -n 1)
+          cp "$APK_SRC" "dist/Twelve-${VERSION}.apk"
+          cp "$AAB_SRC" "dist/Twelve-${VERSION}.aab"
+          cd dist
+          for f in *.apk *.aab; do
+            sha256sum "$f" > "$f.sha256"
+          done
+          ls -lh
+
+      - name: 📝 Generate PR-Only Changelog (Commits & Issues)
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - > release_notes.md << 'EOF'
+          import os
+          import re
+          import subprocess
+
+          pr_num = os.environ["PR_NUMBER"]
+          pr_title = os.environ.get("PR_TITLE", "")
+          pr_body = os.environ.get("PR_BODY", "")
+          base_sha = os.environ["BASE_SHA"]
+          head_sha = os.environ["HEAD_SHA"]
+
+          cmd = ["git", "log", f"{base_sha}..{head_sha}", "--no-merges", "--pretty=format:%h|%s|%b%x1e"]
+          raw = subprocess.check_output(cmd, text=True, errors="replace")
+
+          commits = []
+          issues = set()
+          for m in re.findall(r"#(\d+)", f"{pr_title}\n{pr_body}"):
+              issues.add(int(m))
+
+          for entry in raw.split("\x1e"):
+              entry = entry.strip()
+              if not entry:
+                  continue
+              parts = entry.split("|", 2)
+              sha = parts[0]
+              subj = parts[1] if len(parts) > 1 else ""
+              body = parts[2] if len(parts) > 2 else ""
+              commits.append(f"- {subj} (`{sha}`)")
+              for m in re.findall(r"#(\d+)", f"{subj}\n{body}"):
+                  issues.add(int(m))
+
+          print(f"## 🚀 Twelve {os.environ.get('TAG', '')} (PR #{pr_num}: {pr_title})\n")
+          print("### 📋 Issues")
+          if issues:
+              for num in sorted(issues):
+                  print(f"- #{num}")
+          else:
+              print("- No referenced issues in this pull request.")
+          print("\n### 📝 Pull Request Commits")
+          if commits:
+              print("\n".join(commits))
+          else:
+              print("- No commits found in pull request range.")
+          EOF
+          cat release_notes.md
+
+      - name: 📊 Generate Release Summary
+        if: always()
+        run: |
+          APK_FILE=$(ls dist/*.apk 2>/dev/null | head -n 1)
+          APK_NAME=$([ -n "$APK_FILE" ] && basename "$APK_FILE" || echo "N/A")
+          APK_SIZE=$([ -n "$APK_FILE" ] && du -h "$APK_FILE" | cut -f1 || echo "N/A")
+          APK_SHA256=$([ -n "$APK_FILE" ] && cut -d' ' -f1 "$APK_FILE.sha256" || echo "N/A")
+          {
+            echo "### 🚀 Twelve Release Summary (\`$TAG\`)"
+            echo "| Field | Value |"
+            echo "| :--- | :--- |"
+            echo "| 🏷️ **Version** | \`$VERSION\` (\`versionCode: ${{ github.run_number }}\`) |"
+            echo "| 📦 **APK** | \`$APK_NAME\` |"
+            echo "| 📏 **Size** | \`$APK_SIZE\` |"
+            echo "| 🔑 **Signing** | 🔐 Production Keystore (\`ANDROID_KEYSTORE_RELEASE_BASE64\`) |"
+            echo "| 🔒 **SHA-256** | \`$APK_SHA256\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 🧹 Clean up Keystore from Runner
+        if: always()
+        run: |
+          if [ -f "$RUNNER_TEMP/release.jks" ]; then
+            shred -u -z "$RUNNER_TEMP/release.jks" 2>/dev/null || rm -f "$RUNNER_TEMP/release.jks"
+          fi
+          echo "KEYSTORE_FILE=" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=" >> "$GITHUB_ENV"
+
+      - name: 🚀 Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.TAG }}
+          target_commitish: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          name: Twelve ${{ env.TAG }}
+          body_path: release_notes.md
+          make_latest: true
+          files: |
+            dist/*.apk
+            dist/*.apk.sha256
+            dist/*.aab
+            dist/*.aab.sha256
+
+      - name: 📲 Send Release APK to Telegram
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID_DEBUG }}
+          REPO_URL: https://github.com/${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_NUM: ${{ github.run_number }}
+        if: env.TELEGRAM_BOT_TOKEN != '' && env.TELEGRAM_CHAT_ID != ''
+        run: |
+          APK_FILE=$(ls dist/*.apk | head -n 1)
+          APK_NAME=$(basename "$APK_FILE")
+          APK_SIZE=$(du -h "$APK_FILE" | cut -f1)
+          APK_SHA256=$(cut -d' ' -f1 "${APK_FILE}.sha256" 2>/dev/null || sha256sum "$APK_FILE" | cut -d' ' -f1)
+
+          CAPTION_FILE="$RUNNER_TEMP/tg_caption.html"
+          python3 - "$APK_NAME" "$APK_SIZE" "$APK_SHA256" > "$CAPTION_FILE" << 'EOF'
+          import html
+          import os
+          import re
+          import subprocess
+          import sys
+
+          apk_name, apk_size, apk_sha256 = sys.argv[1:4]
+          repo_url = os.environ["REPO_URL"]
+          version = os.environ["VERSION"]
+          tag = os.environ["TAG"]
+          run_num = os.environ["RUN_NUM"]
+          pr_num = os.environ["PR_NUMBER"]
+          pr_title = os.environ.get("PR_TITLE", "").strip()
+          pr_body = os.environ.get("PR_BODY", "").strip()
+          base_sha = os.environ["BASE_SHA"]
+          head_sha = os.environ["HEAD_SHA"]
+
+          cmd = ["git", "log", f"{base_sha}..{head_sha}", "--no-merges", "--pretty=format:%s%x1e"]
+          raw = subprocess.check_output(cmd, text=True, errors="replace")
+          subjects = [s.strip() for s in raw.split("\x1e") if s.strip()]
+
+          issues = set()
+          for m in re.findall(r"#(\d+)", f"{pr_title}\n{pr_body}\n" + "\n".join(subjects)):
+              issues.add(int(m))
+
+          summary_text = html.escape(pr_title) if pr_title else f"{len(subjects)} cambios incluidos"
+          if len(summary_text) > 160:
+              summary_text = summary_text[:157] + "..."
+
+          caption = (
+              f"🚀 <b>[RELEASE] Twelve {html.escape(tag)}</b>\n"
+              f"🏷 <b>Versión:</b> <code>v{html.escape(version)}</code> · <b>Build:</b> <code>#{run_num}</code>\n"
+              f"📦 <b>APK:</b> <code>{html.escape(apk_name)}</code> ({apk_size})\n"
+              f"🔒 <b>SHA-256:</b> <code>{apk_sha256[:16]}...</code>\n"
+              f"🔀 <b>PR:</b> <a href=\"{repo_url}/pull/{pr_num}\">#{pr_num}</a>\n"
+              f"🔗 <a href=\"{repo_url}/releases/tag/{html.escape(tag)}\">Ver Release en GitHub</a>\n\n"
+              f"📝 <b>Resumen:</b> {summary_text} ({len(subjects)} commits)"
+          )
+          if issues:
+              links = ", ".join(f"<a href=\"{repo_url}/issues/{n}\">#{n}</a>" for n in sorted(issues))
+              caption += f"\n📋 <b>Issues:</b> {links}"
+
+          print(caption.strip()[:1024])
+          EOF
+
+          RESP_FILE="$RUNNER_TEMP/tg_resp.json"
+          HTTP_CODE=$(curl -sS --http1.1 --connect-timeout 15 --max-time 120 \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            -o "$RESP_FILE" -w "%{http_code}" -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+            -F "chat_id=${TELEGRAM_CHAT_ID}" \
+            -F "document=@${APK_FILE}" \
+            -F "parse_mode=HTML" \
+            -F "caption=<${CAPTION_FILE}")
+          rm -f "$CAPTION_FILE"
+          if [ "$HTTP_CODE" -lt 200 ] || [ "$HTTP_CODE" -ge 300 ]; then
+            echo "::warning::⚠️ Telegram upload failed with HTTP status $HTTP_CODE: $(cat "$RESP_FILE" 2>/dev/null)"
+            rm -f "$RESP_FILE"
+            exit 1
+          fi
+          rm -f "$RESP_FILE"
+
+      - name: 🔒 Final Runner Secret & Workspace Cleanup
+        if: always()
+        run: |
+          rm -rf dist release_notes.md "$RUNNER_TEMP"/*.jks
