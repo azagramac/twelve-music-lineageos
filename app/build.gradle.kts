@@ -18,8 +18,22 @@ android {
         applicationId = "org.lineageos.twelve"
         minSdk = 30
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        // Overridable from CI with -PversionCode=... -PversionName=...
+        versionCode = (findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (findProperty("versionName") as String?) ?: "1.0"
+    }
+
+    // Only active when the CI exports KEYSTORE_FILE, upstream builds are unaffected
+    signingConfigs {
+        create("ci") {
+            val keystorePath = System.getenv("KEYSTORE_FILE")
+            if (!keystorePath.isNullOrEmpty()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD") ?: System.getenv("KEYSTORE_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
@@ -34,11 +48,19 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
+            signingConfigs.getByName("ci").takeIf { it.storeFile != null }?.let {
+                signingConfig = it
+            }
         }
 
         debug {
             // Append .dev to package name so we won't conflict with AOSP build.
             applicationIdSuffix = ".dev"
+
+            signingConfigs.getByName("ci").takeIf { it.storeFile != null }?.let {
+                signingConfig = it
+            }
         }
     }
 
