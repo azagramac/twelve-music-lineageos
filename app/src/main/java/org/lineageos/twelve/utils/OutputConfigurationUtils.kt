@@ -68,6 +68,9 @@ object OutputConfigurationUtils {
         OutputConfiguration.Encoding.PCM_FLOAT to 32,
     )
 
+    fun pcmEncodingBitDepth(media3Encoding: @C.Encoding Int): Int? =
+        encodingFromMedia3Encoding(media3Encoding)?.let { pcmEncodingBitDepths[it] }
+
     @JvmName("classifyNullable")
     fun classify(
         source: OutputConfiguration.Source?,

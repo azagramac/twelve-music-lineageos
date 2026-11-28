@@ -29,6 +29,7 @@ private val sampleNowPlayingState = NowPlayingUiState(
     trackBitrateKbps = 1411,
     outputDeviceType = OutputConfiguration.Device.Type.USB,
     isDirectOutputActive = true,
+    dynamicBackgroundEnabled = true,
     previousLyric = "Silent rain falls over Shibuya crossing",
     currentLyric = "Echoes in warm analog tape saturation",
     nextLyric = "Waiting for the last train home",
@@ -61,6 +62,23 @@ fun NowPlayingExpressiveLightPreview() {
 @Composable
 fun NowPlayingExpressiveDarkPreview() {
     TwelveExpressiveTheme(darkTheme = true, dynamicColor = true) {
+        NowPlayingScreen(
+            state = sampleNowPlayingState,
+            callbacks = NowPlayingCallbacks(),
+            previewVisualizerBars = true,
+        )
+    }
+}
+
+@Preview(
+    name = "Now Playing M3E (AMOLED Pure Black)",
+    showBackground = true,
+    widthDp = 412,
+    heightDp = 915,
+)
+@Composable
+fun NowPlayingExpressiveAmoledPreview() {
+    TwelveExpressiveTheme(darkTheme = true, dynamicColor = false, amoledBlack = true) {
         NowPlayingScreen(
             state = sampleNowPlayingState,
             callbacks = NowPlayingCallbacks(),

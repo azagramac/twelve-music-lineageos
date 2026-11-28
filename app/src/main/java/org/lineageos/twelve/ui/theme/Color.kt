@@ -5,6 +5,7 @@
 
 package org.lineageos.twelve.ui.theme
 
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.graphics.Color
@@ -145,4 +146,14 @@ val TwelveExpressiveDarkColorScheme = darkColorScheme(
     surfaceContainer = TwelveSurfaceContainerDark,
     surfaceContainerHigh = TwelveSurfaceContainerHighDark,
     surfaceContainerHighest = TwelveSurfaceContainerHighestDark,
+)
+
+fun ColorScheme.asAmoledPureBlack(): ColorScheme = copy(
+    background = Color.Black,
+    surface = Color.Black,
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF0A0A0D),
+    surfaceContainer = Color(0xFF121216),
+    surfaceContainerHigh = Color(0xFF1A1A20),
+    surfaceContainerHighest = Color(0xFF23232B),
 )

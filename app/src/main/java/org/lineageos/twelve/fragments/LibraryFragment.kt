@@ -41,6 +41,10 @@ class LibraryFragment : Fragment(R.layout.fragment_library) {
         @param:StringRes val titleStringResId: Int,
         val fragment: () -> Fragment,
     ) {
+        SONGS(
+            R.string.library_fragment_menu_songs,
+            { SongsFragment() },
+        ),
         ALBUMS(
             R.string.library_fragment_menu_albums,
             { AlbumsFragment() },

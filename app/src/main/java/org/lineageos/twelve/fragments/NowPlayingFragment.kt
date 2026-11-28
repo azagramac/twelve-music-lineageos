@@ -17,6 +17,7 @@ import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.viewModels
@@ -25,11 +26,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.Player
 import androidx.navigation.fragment.findNavController
+import androidx.preference.PreferenceManager
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import me.bogerchan.niervisualizer.NierVisualizerManager
 import org.lineageos.twelve.R
+import org.lineageos.twelve.ext.dynamicBackground
+import org.lineageos.twelve.ext.dynamicBackgroundFlow
 import org.lineageos.twelve.ext.navigateSafe
 import org.lineageos.twelve.models.FlowResult
 import org.lineageos.twelve.models.OutputConfiguration
@@ -103,6 +107,13 @@ class NowPlayingFragment : Fragment() {
             val outputConfiguration by viewModel.outputConfiguration.collectAsState()
             val lyricsResult by viewModel.lyricsLines.collectAsState()
 
+            val prefs = remember {
+                PreferenceManager.getDefaultSharedPreferences(requireContext().applicationContext)
+            }
+            val dynamicBackgroundEnabled by prefs.dynamicBackgroundFlow.collectAsState(
+                initial = prefs.dynamicBackground
+            )
+
             val currentAudio = (audioResult as? FlowResult.Success)?.data
             val artworkThumbnail = (mediaArtwork as? Result.Success)?.data
             val lyricsPair = (lyricsResult as? FlowResult.Success)?.data
@@ -144,6 +155,7 @@ class NowPlayingFragment : Fragment() {
                     outputConfiguration?.verdict?.potentialIssues?.isNotEmpty() == true,
                 isDirectOutputActive = outputConfiguration?.transcoding?.outputMode ==
                     OutputConfiguration.Transcoding.OutputMode.DIRECT,
+                dynamicBackgroundEnabled = dynamicBackgroundEnabled,
                 previousLyric = lyricsList?.getOrNull(lyricsIndex - 1)?.first?.text,
                 currentLyric = lyricsList?.getOrNull(lyricsIndex)?.first?.text,
                 nextLyric = lyricsList?.getOrNull(lyricsIndex + 1)?.first?.text,

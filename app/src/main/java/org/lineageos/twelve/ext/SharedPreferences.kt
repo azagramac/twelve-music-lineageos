@@ -43,8 +43,44 @@ fun <T> SharedPreferences.preferenceFlow(
 // Generic prefs
 const val FULLSCREEN_MODE_KEY = "fullscreen_mode"
 private const val FULLSCREEN_MODE_DEFAULT = false
-val SharedPreferences.fullscreenMode: Boolean
+var SharedPreferences.fullscreenMode: Boolean
     get() = getBoolean(FULLSCREEN_MODE_KEY, FULLSCREEN_MODE_DEFAULT)
+    set(value) = edit {
+        putBoolean(FULLSCREEN_MODE_KEY, value)
+    }
+
+const val THEME_MODE_KEY = "theme_mode"
+const val THEME_MODE_SYSTEM = "system"
+const val THEME_MODE_LIGHT = "light"
+const val THEME_MODE_DARK = "dark"
+const val THEME_MODE_AMOLED = "amoled"
+var SharedPreferences.themeMode: String
+    get() = getString(THEME_MODE_KEY, THEME_MODE_SYSTEM) ?: THEME_MODE_SYSTEM
+    set(value) = edit {
+        putString(THEME_MODE_KEY, value)
+    }
+val SharedPreferences.themeModeFlow
+    get() = preferenceFlow(THEME_MODE_KEY) { themeMode }
+
+const val DYNAMIC_COLOR_KEY = "dynamic_color"
+private const val DYNAMIC_COLOR_DEFAULT = true
+var SharedPreferences.dynamicColor: Boolean
+    get() = getBoolean(DYNAMIC_COLOR_KEY, DYNAMIC_COLOR_DEFAULT)
+    set(value) = edit {
+        putBoolean(DYNAMIC_COLOR_KEY, value)
+    }
+val SharedPreferences.dynamicColorFlow
+    get() = preferenceFlow(DYNAMIC_COLOR_KEY) { dynamicColor }
+
+const val DYNAMIC_BACKGROUND_KEY = "dynamic_background"
+private const val DYNAMIC_BACKGROUND_DEFAULT = true
+var SharedPreferences.dynamicBackground: Boolean
+    get() = getBoolean(DYNAMIC_BACKGROUND_KEY, DYNAMIC_BACKGROUND_DEFAULT)
+    set(value) = edit {
+        putBoolean(DYNAMIC_BACKGROUND_KEY, value)
+    }
+val SharedPreferences.dynamicBackgroundFlow
+    get() = preferenceFlow(DYNAMIC_BACKGROUND_KEY) { dynamicBackground }
 
 const val ENABLE_OFFLOAD_KEY = "enable_offload"
 private const val ENABLE_OFFLOAD_DEFAULT = true
@@ -82,8 +118,11 @@ var SharedPreferences.stopPlaybackOnTaskRemoved: Boolean
 
 const val SKIP_SILENCE_KEY = "skip_silence"
 private const val SKIP_SILENCE_DEFAULT = false
-val SharedPreferences.skipSilence: Boolean
+var SharedPreferences.skipSilence: Boolean
     get() = getBoolean(SKIP_SILENCE_KEY, SKIP_SILENCE_DEFAULT)
+    set(value) = edit {
+        putBoolean(SKIP_SILENCE_KEY, value)
+    }
 
 const val DEFAULT_PROVIDER_KEY = "default_provider"
 var SharedPreferences.defaultProvider: ProviderIdentifier?
@@ -102,8 +141,11 @@ var SharedPreferences.defaultProvider: ProviderIdentifier?
 // Experimental prefs
 const val SPLIT_LOCAL_DEVICES_KEY = "split_local_devices"
 private const val SPLIT_LOCAL_DEVICES_DEFAULT = false
-val SharedPreferences.splitLocalDevices: Boolean
+var SharedPreferences.splitLocalDevices: Boolean
     get() = getBoolean(SPLIT_LOCAL_DEVICES_KEY, SPLIT_LOCAL_DEVICES_DEFAULT)
+    set(value) = edit {
+        putBoolean(SPLIT_LOCAL_DEVICES_KEY, value)
+    }
 
 // Playback prefs
 private const val TYPED_REPEAT_MODE_KEY = "typed_repeat_mode"
@@ -198,5 +240,19 @@ var SharedPreferences.playlistsSortingRule: SortingRule
     set(value) = setSortingRule(
         PLAYLISTS_SORTING_STRATEGY_KEY,
         PLAYLISTS_SORTING_REVERSE_KEY,
+        value
+    )
+
+const val SONGS_SORTING_STRATEGY_KEY = "songs_sorting_strategy"
+const val SONGS_SORTING_REVERSE_KEY = "songs_sorting_reverse"
+var SharedPreferences.songsSortingRule: SortingRule
+    get() = getSortingRule(
+        SONGS_SORTING_STRATEGY_KEY,
+        SONGS_SORTING_REVERSE_KEY,
+        MediaRepository.defaultAudiosSortingRule,
+    )
+    set(value) = setSortingRule(
+        SONGS_SORTING_STRATEGY_KEY,
+        SONGS_SORTING_REVERSE_KEY,
         value
     )

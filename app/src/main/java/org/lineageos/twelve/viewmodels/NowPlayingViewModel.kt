@@ -232,7 +232,7 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
             require(groups.size <= 1) { "More than one audio track selected" }
 
             groups.firstOrNull()?.let { group ->
-                (0..group.length).firstNotNullOfOrNull { i ->
+                (0 until group.length).firstNotNullOfOrNull { i ->
                     when (group.isTrackSelected(i)) {
                         true -> group.getTrackFormat(i)
                         false -> null
@@ -247,9 +247,23 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
             initialValue = null
         )
 
-    val mimeType = combine(currentTrackFormat, mediaItem) { format, mediaItem ->
+    private val effectiveFormat = combine(
+        currentTrackFormat,
+        outputConfigurationRepository.format,
+    ) { trackFormat, repoFormat ->
+        trackFormat ?: repoFormat
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null
+        )
+
+    val mimeType = combine(effectiveFormat, audio, mediaItem) { format, audioResult, mediaItem ->
         format?.sampleMimeType
             ?: format?.containerMimeType
+            ?: audioResult.getOrNull()?.mimeType
             ?: mediaItem?.localConfiguration?.mimeType
     }
         .flowOn(Dispatchers.IO)
@@ -261,12 +275,11 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
 
     @androidx.annotation.OptIn(UnstableApi::class)
     @OptIn(ExperimentalCoroutinesApi::class)
-    val displayFileType = mimeType
-        .mapLatest { mimeType ->
-            mimeType?.let {
-                MimeUtils.mimeTypeToDisplayName(it)
-            }
+    val displayFileType = combine(mimeType, effectiveFormat) { mimeType, format ->
+        mimeType?.let {
+            MimeUtils.mimeTypeToDisplayName(it, format?.codecs)
         }
+    }
         .flowOn(Dispatchers.IO)
         .stateIn(
             viewModelScope,
@@ -396,7 +409,7 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
         )
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val outputSource = currentTrackFormat
+    private val outputSource = effectiveFormat
         .mapLatest { it?.toModel() }
         .flowOn(Dispatchers.IO)
         .shareIn(
@@ -450,9 +463,8 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
     /**
      * Reactive Hi-Fi track bitrate in kbps (e.g., 912).
      */
-    @androidx.annotation.OptIn(UnstableApi::class)
     val trackBitrateKbps: StateFlow<Int?> = combine(
-        currentTrackFormat,
+        effectiveFormat,
         outputConfiguration,
     ) { format, config ->
         val rawBps = config?.source?.averageBitrateBps?.takeIf { it > 0 }
@@ -467,7 +479,9 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
             else -> {
                 val sampleRate = config?.source?.sampleRateHz ?: format?.sampleRate?.takeIf { it > 0 }
                 val channels = config?.source?.channelCount ?: format?.channelCount?.takeIf { it > 0 }
-                val bitDepth = config?.source?.bitDepth ?: config?.transcoding?.bitDepth
+                val bitDepth = config?.source?.bitDepth
+                    ?: config?.transcoding?.bitDepth
+                    ?: format?.pcmEncoding?.let { OutputConfigurationUtils.pcmEncodingBitDepth(it) }
                 if (sampleRate != null && channels != null && bitDepth != null) {
                     (sampleRate.toLong() * channels * bitDepth / 1000L).toInt()
                 } else {
@@ -486,12 +500,13 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
     /**
      * Reactive Hi-Fi track sample rate & bit depth formatted string (e.g., "24-bit / 96 kHz").
      */
-    @androidx.annotation.OptIn(UnstableApi::class)
     val trackSampleRateAndBitDepth: StateFlow<String?> = combine(
-        currentTrackFormat,
+        effectiveFormat,
         outputConfiguration,
     ) { format, config ->
-        val bitDepth = config?.source?.bitDepth ?: config?.transcoding?.bitDepth
+        val bitDepth = config?.source?.bitDepth
+            ?: format?.pcmEncoding?.let { OutputConfigurationUtils.pcmEncodingBitDepth(it) }
+            ?: config?.transcoding?.bitDepth
         val sampleRateHz = config?.source?.sampleRateHz
             ?: format?.sampleRate?.takeIf { it > 0 }
             ?: config?.transcoding?.sampleRateHz
@@ -519,13 +534,24 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
     val isHiFi: StateFlow<Boolean> = combine(
         outputConfiguration,
         mimeType,
-        currentTrackFormat,
-    ) { config, mime, _ ->
-        val compression = config?.source?.compression
+        effectiveFormat,
+        audio,
+        mediaItem,
+    ) { config, mime, format, audioResult, mediaItem ->
+        val formatModel = format?.toModel()
+        val compression = config?.source?.compression ?: formatModel?.compression
         val isLosslessCompression = compression == OutputConfiguration.Compression.LOSSLESS ||
             compression == OutputConfiguration.Compression.UNCOMPRESSED
-        val bitDepth = config?.source?.bitDepth ?: config?.transcoding?.bitDepth ?: 0
-        isLosslessCompression || MimeUtils.isLosslessMimeType(mime) || bitDepth >= 24
+        val bitDepth = config?.source?.bitDepth
+            ?: formatModel?.bitDepth
+            ?: config?.transcoding?.bitDepth
+            ?: 0
+        val trackUriString = audioResult.getOrNull()?.playbackUri?.toString()
+            ?: mediaItem?.localConfiguration?.uri?.toString()
+
+        isLosslessCompression ||
+            MimeUtils.isLosslessMimeType(mime, format?.codecs, trackUriString) ||
+            bitDepth >= 24
     }
         .flowOn(Dispatchers.IO)
         .stateIn(

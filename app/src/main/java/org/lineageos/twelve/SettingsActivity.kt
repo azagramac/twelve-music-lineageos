@@ -5,224 +5,514 @@
 
 package org.lineageos.twelve
 
+import android.os.Build
 import android.os.Bundle
-import android.view.LayoutInflater
-import android.view.MenuItem
-import android.view.View
-import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.annotation.CallSuper
-import androidx.annotation.Px
-import androidx.annotation.XmlRes
-import androidx.appcompat.app.AppCompatActivity
-import androidx.coordinatorlayout.widget.CoordinatorLayout
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.updatePadding
-import androidx.fragment.app.viewModels
-import androidx.lifecycle.lifecycleScope
-import androidx.preference.Preference
-import androidx.preference.PreferenceFragmentCompat
-import androidx.preference.SwitchPreference
-import com.google.android.material.appbar.AppBarLayout
-import com.google.android.material.appbar.MaterialToolbar
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import androidx.activity.viewModels
+import androidx.annotation.DrawableRes
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.preference.PreferenceManager
 import kotlinx.coroutines.launch
-import org.lineageos.twelve.ext.ENABLE_DIRECT_OUTPUT_KEY
-import org.lineageos.twelve.ext.ENABLE_OFFLOAD_KEY
-import org.lineageos.twelve.ext.SKIP_SILENCE_KEY
-import org.lineageos.twelve.ext.setOffset
+import org.lineageos.twelve.ext.THEME_MODE_AMOLED
+import org.lineageos.twelve.ext.THEME_MODE_DARK
+import org.lineageos.twelve.ext.THEME_MODE_LIGHT
+import org.lineageos.twelve.ext.THEME_MODE_SYSTEM
+import org.lineageos.twelve.ext.dynamicBackground
+import org.lineageos.twelve.ext.dynamicColor
+import org.lineageos.twelve.ext.enableDirectOutput
+import org.lineageos.twelve.ext.enableFloatOutput
+import org.lineageos.twelve.ext.enableOffload
+import org.lineageos.twelve.ext.fullscreenMode
+import org.lineageos.twelve.ext.skipSilence
+import org.lineageos.twelve.ext.splitLocalDevices
+import org.lineageos.twelve.ext.stopPlaybackOnTaskRemoved
+import org.lineageos.twelve.ext.themeMode
+import org.lineageos.twelve.ui.haptics.rememberTwelveHaptics
+import org.lineageos.twelve.ui.theme.TwelveExpressiveTheme
 import org.lineageos.twelve.viewmodels.SettingsViewModel
-import kotlin.reflect.safeCast
 
-class SettingsActivity : AppCompatActivity(R.layout.activity_settings) {
-    private val appBarLayout by lazy { findViewById<AppBarLayout>(R.id.appBarLayout) }
-    private val coordinatorLayout by lazy { findViewById<CoordinatorLayout>(R.id.coordinatorLayout) }
-    private val toolbar by lazy { findViewById<MaterialToolbar>(R.id.toolbar) }
+/**
+ * Material 3 Expressive Compose settings screen replacing legacy XML PreferenceFragmentCompat.
+ */
+class SettingsActivity : ComponentActivity() {
+    private val viewModel by viewModels<SettingsViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Enable edge-to-edge
         enableEdgeToEdge()
 
-        if (savedInstanceState == null) {
-            supportFragmentManager
-                .beginTransaction()
-                .replace(R.id.settings, RootSettingsFragment())
-                .commit()
-        }
-
-        setSupportActionBar(toolbar)
-        supportActionBar?.apply {
-            setDisplayHomeAsUpEnabled(true)
-            setDisplayShowHomeEnabled(true)
-        }
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem) = when (item.itemId) {
-        android.R.id.home -> {
-            onBackPressedDispatcher.onBackPressed()
-            true
-        }
-
-        else -> {
-            super.onOptionsItemSelected(item)
-        }
-    }
-
-    abstract class SettingsFragment(
-        @XmlRes private val preferencesResId: Int,
-    ) : PreferenceFragmentCompat() {
-        // View model
-        protected val viewModel by viewModels<SettingsViewModel>()
-
-        private val settingsActivity
-            get() = SettingsActivity::class.safeCast(activity)
-
-        @Px
-        private var appBarOffset = -1
-
-        private val offsetChangedListener = AppBarLayout.OnOffsetChangedListener { _, i ->
-            appBarOffset = -i
-        }
-
-        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-            super.onViewCreated(view, savedInstanceState)
-
-            settingsActivity?.let { settingsActivity ->
-                val appBarLayout = settingsActivity.appBarLayout
-
-                if (appBarOffset != -1) {
-                    appBarLayout.setOffset(appBarOffset, settingsActivity.coordinatorLayout)
-                } else {
-                    appBarLayout.setExpanded(true, false)
-                }
-
-                appBarLayout.setLiftOnScrollTargetView(listView)
-
-                appBarLayout.addOnOffsetChangedListener(offsetChangedListener)
-            }
-        }
-
-        override fun onDestroyView() {
-            settingsActivity?.appBarLayout?.apply {
-                removeOnOffsetChangedListener(offsetChangedListener)
-
-                setLiftOnScrollTargetView(null)
-            }
-
-            super.onDestroyView()
-        }
-
-        @CallSuper
-        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            setPreferencesFromResource(preferencesResId, rootKey)
-        }
-
-        @CallSuper
-        override fun onCreateRecyclerView(
-            inflater: LayoutInflater,
-            parent: ViewGroup,
-            savedInstanceState: Bundle?
-        ) = super.onCreateRecyclerView(inflater, parent, savedInstanceState).apply {
-            clipToPadding = false
-            isVerticalScrollBarEnabled = false
-
-            ViewCompat.setOnApplyWindowInsetsListener(this) { _, windowInsets ->
-                val insets = windowInsets.getInsets(WindowInsetsCompat.Type.systemBars())
-
-                updatePadding(
-                    bottom = insets.bottom,
-                    left = insets.left,
-                    right = insets.right,
+        setContent {
+            TwelveExpressiveTheme {
+                SettingsScreen(
+                    viewModel = viewModel,
+                    onNavigateUp = { onBackPressedDispatcher.onBackPressed() },
                 )
-
-                windowInsets
             }
         }
     }
+}
 
-    class RootSettingsFragment : SettingsFragment(R.xml.root_preferences) {
-        // Preferences
-        private val enableDirectOutput by lazy { findPreference<SwitchPreference>(ENABLE_DIRECT_OUTPUT_KEY)!! }
-        private val enableOffload by lazy { findPreference<SwitchPreference>(ENABLE_OFFLOAD_KEY)!! }
-        private val rescanMediaStore by lazy { findPreference<Preference>("rescan_media_store")!! }
-        private val resetLocalStats by lazy { findPreference<Preference>("reset_local_stats")!! }
-        private val skipSilence by lazy { findPreference<SwitchPreference>(SKIP_SILENCE_KEY)!! }
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    onNavigateUp: () -> Unit,
+) {
+    val context = LocalContext.current
+    val prefs = remember(context) {
+        PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
+    }
+    val scope = rememberCoroutineScope()
+    val haptics = rememberTwelveHaptics()
+    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
-        override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
-            super.onCreatePreferences(savedInstanceState, rootKey)
+    var themeMode by remember { mutableStateOf(prefs.themeMode) }
+    var dynamicColor by remember { mutableStateOf(prefs.dynamicColor) }
+    var dynamicBackground by remember { mutableStateOf(prefs.dynamicBackground) }
+    var fullscreenMode by remember { mutableStateOf(prefs.fullscreenMode) }
 
-            enableDirectOutput.setOnPreferenceChangeListener { _, newValue ->
-                lifecycleScope.launch {
-                    viewModel.toggleDirectOutput(newValue as Boolean)
-                }
-                true
-            }
+    var enableOffload by remember { mutableStateOf(prefs.enableOffload) }
+    var enableFloatOutput by remember { mutableStateOf(prefs.enableFloatOutput) }
+    var enableDirectOutput by remember { mutableStateOf(prefs.enableDirectOutput) }
+    var skipSilence by remember { mutableStateOf(prefs.skipSilence) }
+    var stopOnTaskRemoved by remember { mutableStateOf(prefs.stopPlaybackOnTaskRemoved) }
+    var splitLocalDevices by remember { mutableStateOf(prefs.splitLocalDevices) }
 
-            enableOffload.setOnPreferenceChangeListener { _, newValue ->
-                lifecycleScope.launch {
-                    viewModel.toggleOffload(newValue as Boolean)
-                }
-                true
-            }
+    var showResetStatsDialog by remember { mutableStateOf(false) }
+    var showRescanDialog by remember { mutableStateOf(false) }
 
-            skipSilence.setOnPreferenceChangeListener { _, newValue ->
-                lifecycleScope.launch {
-                    viewModel.toggleSkipSilence(newValue as Boolean)
-                }
-                true
-            }
-
-            resetLocalStats.setOnPreferenceClickListener {
-                showResetLocalStatsDialog()
-                true
-            }
-
-            rescanMediaStore.setOnPreferenceClickListener {
-                showRescanMediaStoreDialog()
-                true
-            }
-        }
-
-        private fun showResetLocalStatsDialog() {
-            val context = requireActivity()
-            MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.reset_local_stats_confirm_title)
-                .setMessage(R.string.reset_local_stats_confirm_message)
-                .setPositiveButton(R.string.reset_local_stats_confirm_positive) { _, _ ->
-                    lifecycleScope.launch {
-                        viewModel.resetLocalStats()
-
-                        Toast.makeText(
-                            context,
-                            R.string.reset_local_stats_success,
-                            Toast.LENGTH_SHORT
-                        ).show()
+    Scaffold(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(scrollBehavior.nestedScrollConnection),
+        topBar = {
+            LargeTopAppBar(
+                title = {
+                    Text(
+                        text = stringResource(R.string.title_activity_settings),
+                        style = MaterialTheme.typography.headlineMediumEmphasized,
+                    )
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = {
+                            haptics.click()
+                            onNavigateUp()
+                        },
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_keyboard_arrow_down),
+                            contentDescription = null,
+                        )
+                    }
+                },
+                scrollBehavior = scrollBehavior,
+            )
+        },
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .navigationBarsPadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            SettingsSection(title = stringResource(R.string.settings_appearance_header)) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.theme_mode),
+                        style = MaterialTheme.typography.titleSmallEmphasized,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    val themeOptions = listOf(
+                        THEME_MODE_SYSTEM to stringResource(R.string.theme_mode_system),
+                        THEME_MODE_LIGHT to stringResource(R.string.theme_mode_light),
+                        THEME_MODE_DARK to stringResource(R.string.theme_mode_dark),
+                        THEME_MODE_AMOLED to stringResource(R.string.theme_mode_amoled),
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        themeOptions.forEach { (value, label) ->
+                            val selected = themeMode == value
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        haptics.click()
+                                        themeMode = value
+                                        prefs.themeMode = value
+                                    },
+                                shape = CircleShape,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceContainerHighest
+                                },
+                            ) {
+                                Text(
+                                    text = label,
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    style = MaterialTheme.typography.labelMediumEmphasized,
+                                    color = if (selected) {
+                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    },
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                )
+                            }
+                        }
                     }
                 }
-                .setNegativeButton(android.R.string.cancel) { _, _ -> /* Do nothing */ }
-                .show()
-        }
 
-        private fun showRescanMediaStoreDialog() {
-            val context = requireActivity()
-            MaterialAlertDialogBuilder(context)
-                .setTitle(R.string.rescan_media_store_confirm_title)
-                .setMessage(R.string.rescan_media_store_confirm_message)
-                .setPositiveButton(R.string.rescan_media_store_confirm_positive) { _, _ ->
-                    viewModel.rescanMediaStore()
-
-                    Toast.makeText(
-                        context,
-                        R.string.rescan_media_store_started,
-                        Toast.LENGTH_SHORT
-                    ).show()
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    SectionDivider()
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.dynamic_color),
+                        summary = stringResource(R.string.dynamic_color_summary),
+                        checked = dynamicColor,
+                        onCheckedChange = {
+                            haptics.click()
+                            dynamicColor = it
+                            prefs.dynamicColor = it
+                        },
+                    )
                 }
-                .setNegativeButton(android.R.string.cancel) { _, _ -> /* Do nothing */ }
-                .show()
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = stringResource(R.string.dynamic_background),
+                    summary = stringResource(R.string.dynamic_background_summary),
+                    checked = dynamicBackground,
+                    onCheckedChange = {
+                        haptics.click()
+                        dynamicBackground = it
+                        prefs.dynamicBackground = it
+                    },
+                )
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = stringResource(R.string.fullscreen_mode),
+                    summary = stringResource(R.string.fullscreen_mode_summary),
+                    checked = fullscreenMode,
+                    onCheckedChange = {
+                        haptics.click()
+                        fullscreenMode = it
+                        prefs.fullscreenMode = it
+                    },
+                )
+            }
+
+            SettingsSection(title = stringResource(R.string.settings_audio_header)) {
+                SettingsSwitchRow(
+                    title = stringResource(R.string.enable_direct_output),
+                    summary = stringResource(R.string.enable_direct_output_summary),
+                    checked = enableDirectOutput,
+                    onCheckedChange = { enabled ->
+                        haptics.click()
+                        enableDirectOutput = enabled
+                        prefs.enableDirectOutput = enabled
+                        scope.launch { viewModel.toggleDirectOutput(enabled) }
+                    },
+                )
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = stringResource(R.string.enable_float_output),
+                    summary = stringResource(R.string.enable_float_output_summary),
+                    checked = enableFloatOutput,
+                    onCheckedChange = { enabled ->
+                        haptics.click()
+                        enableFloatOutput = enabled
+                        prefs.enableFloatOutput = enabled
+                    },
+                )
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = stringResource(R.string.enable_offload),
+                    summary = stringResource(R.string.enable_offload_summary),
+                    checked = enableOffload,
+                    onCheckedChange = { enabled ->
+                        haptics.click()
+                        enableOffload = enabled
+                        prefs.enableOffload = enabled
+                        scope.launch { viewModel.toggleOffload(enabled) }
+                    },
+                )
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = stringResource(R.string.skip_silence),
+                    summary = stringResource(R.string.skip_silence_summary),
+                    checked = skipSilence,
+                    onCheckedChange = { enabled ->
+                        haptics.click()
+                        skipSilence = enabled
+                        prefs.skipSilence = enabled
+                        scope.launch { viewModel.toggleSkipSilence(enabled) }
+                    },
+                )
+            }
+
+            SettingsSection(title = stringResource(R.string.settings_library_header)) {
+                SettingsSwitchRow(
+                    title = stringResource(R.string.stop_playback_on_task_removed),
+                    summary = stringResource(R.string.stop_playback_on_task_removed_summary),
+                    checked = stopOnTaskRemoved,
+                    onCheckedChange = { enabled ->
+                        haptics.click()
+                        stopOnTaskRemoved = enabled
+                        prefs.stopPlaybackOnTaskRemoved = enabled
+                    },
+                )
+
+                SectionDivider()
+                SettingsSwitchRow(
+                    title = stringResource(R.string.split_local_devices),
+                    summary = stringResource(R.string.split_local_devices_summary),
+                    checked = splitLocalDevices,
+                    onCheckedChange = { enabled ->
+                        haptics.click()
+                        splitLocalDevices = enabled
+                        prefs.splitLocalDevices = enabled
+                    },
+                )
+
+                SectionDivider()
+                SettingsActionRow(
+                    title = stringResource(R.string.rescan_media_store),
+                    iconRes = R.drawable.ic_sync,
+                    onClick = {
+                        haptics.click()
+                        showRescanDialog = true
+                    },
+                )
+
+                SectionDivider()
+                SettingsActionRow(
+                    title = stringResource(R.string.reset_local_stats),
+                    iconRes = R.drawable.ic_delete,
+                    onClick = {
+                        haptics.click()
+                        showResetStatsDialog = true
+                    },
+                )
+            }
         }
+    }
+
+    if (showResetStatsDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetStatsDialog = false },
+            title = { Text(stringResource(R.string.reset_local_stats_confirm_title)) },
+            text = { Text(stringResource(R.string.reset_local_stats_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetStatsDialog = false
+                        haptics.click()
+                        scope.launch {
+                            viewModel.resetLocalStats()
+                            Toast.makeText(
+                                context,
+                                R.string.reset_local_stats_success,
+                                Toast.LENGTH_SHORT,
+                            ).show()
+                        }
+                    },
+                ) {
+                    Text(stringResource(R.string.reset_local_stats_confirm_positive))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetStatsDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+
+    if (showRescanDialog) {
+        AlertDialog(
+            onDismissRequest = { showRescanDialog = false },
+            title = { Text(stringResource(R.string.rescan_media_store_confirm_title)) },
+            text = { Text(stringResource(R.string.rescan_media_store_confirm_message)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showRescanDialog = false
+                        haptics.click()
+                        viewModel.rescanMediaStore()
+                        Toast.makeText(
+                            context,
+                            R.string.rescan_media_store_started,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    },
+                ) {
+                    Text(stringResource(R.string.rescan_media_store_confirm_positive))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRescanDialog = false }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SettingsSection(
+    title: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLargeEmphasized,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(horizontal = 8.dp),
+        )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+        ) {
+            Column(content = content)
+        }
+    }
+}
+
+@Composable
+private fun SectionDivider() {
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+    )
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SettingsSwitchRow(
+    title: String,
+    summary: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onCheckedChange(!checked) }
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmallEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun SettingsActionRow(
+    title: String,
+    @DrawableRes iconRes: Int,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            painter = painterResource(iconRes),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmallEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
