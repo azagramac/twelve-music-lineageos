@@ -555,6 +555,9 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
             bitDepth = bitDepth,
             isLosslessHint = isLosslessHint,
             deepExtracted = extracted?.deepExtracted == true,
+            channelCount = channels ?: extracted?.channelCount,
+            fileSizeBytes = extracted?.fileSizeBytes,
+            displayName = extracted?.displayName,
         )
     }
         .flowOn(Dispatchers.IO)

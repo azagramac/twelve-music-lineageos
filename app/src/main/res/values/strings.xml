@@ -353,4 +353,27 @@
     <string name="favorites_playlist">Favorites</string>
     <string name="add_to_favorites">Add to favorites</string>
     <string name="remove_from_favorites">Remove from favorites</string>
+
+    <!-- Lune-inspired Now Playing & Audio Details -->
+    <string name="now_playing_label">Playing from</string>
+    <string name="play_state_play">Playing</string>
+    <string name="play_state_pause">Paused</string>
+    <string name="option_shuffle">Shuffle</string>
+    <string name="option_repeat">Repeat</string>
+    <string name="option_queue">Queue</string>
+    <string name="audio_details_title">Audio details</string>
+    <string name="audio_bit_depth">Bit depth</string>
+    <string name="audio_file_size">File size</string>
+    <string name="audio_file_name">File</string>
+    <string name="audio_lossless">Lossless</string>
+    <string name="audio_compressed">Compressed</string>
+    <string name="audio_output_details">Output &amp; audio chain</string>
+    <string name="audio_channels_mono">Mono (1 ch)</string>
+    <string name="audio_channels_stereo">Stereo (2 ch)</string>
+    <string name="song_title">Title</string>
+    <string name="song_artist">Artist</string>
+    <string name="song_album">Album</string>
+    <string name="song_genre">Genre</string>
+    <string name="song_year">Year</string>
+    <string name="song_duration">Duration</string>
 </resources>

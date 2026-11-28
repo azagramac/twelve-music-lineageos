@@ -228,4 +228,25 @@
     <string name="favorites_playlist">Favoritos</string>
     <string name="add_to_favorites">Añadir a favoritos</string>
     <string name="remove_from_favorites">Quitar de favoritos</string>
+    <string name="now_playing_label">Reproduciendo</string>
+    <string name="play_state_play">Sonando</string>
+    <string name="play_state_pause">Pausado</string>
+    <string name="option_shuffle">Aleatorio</string>
+    <string name="option_repeat">Repetir</string>
+    <string name="option_queue">Cola</string>
+    <string name="audio_details_title">Detalles del audio</string>
+    <string name="audio_bit_depth">Profundidad de bits</string>
+    <string name="audio_file_size">Tamaño</string>
+    <string name="audio_file_name">Archivo</string>
+    <string name="audio_lossless">Sin pérdida</string>
+    <string name="audio_compressed">Comprimido</string>
+    <string name="audio_output_details">Ruta de salida y cadena de audio</string>
+    <string name="audio_channels_mono">Mono (1 canal)</string>
+    <string name="audio_channels_stereo">Estéreo (2 canales)</string>
+    <string name="song_title">Título</string>
+    <string name="song_artist">Artista</string>
+    <string name="song_album">Álbum</string>
+    <string name="song_genre">Género</string>
+    <string name="song_year">Año</string>
+    <string name="song_duration">Duración</string>
 </resources>
