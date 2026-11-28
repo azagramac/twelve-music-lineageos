@@ -8,6 +8,7 @@ package org.lineageos.twelve.viewmodels
 import android.app.Application
 import androidx.lifecycle.viewModelScope
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.util.UnstableApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,7 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import org.lineageos.twelve.ext.playbackParametersFlow
 
+@androidx.annotation.OptIn(UnstableApi::class)
 class PlaybackControlViewModel(application: Application) : TwelveViewModel(application) {
     private val _pitchSliderVisible = MutableStateFlow(false)
     val pitchSliderVisible = _pitchSliderVisible.asStateFlow()
