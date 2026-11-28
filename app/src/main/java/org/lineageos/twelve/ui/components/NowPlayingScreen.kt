@@ -93,7 +93,9 @@ data class NowPlayingUiState(
     val speedLabel: String = "1×",
     val isFavorite: Boolean? = null,
     val isVisualizerEnabled: Boolean = false,
+    val isHiRes: Boolean = false,
     val isHiFi: Boolean = false,
+    val isHq: Boolean = false,
     val trackFormat: String? = null,
     val trackSampleRateAndBitDepth: String? = null,
     val trackBitrateKbps: Int? = null,
@@ -362,11 +364,13 @@ fun NowPlayingScreen(
                     }
 
                     HiFiMetadataRow(
+                        isHiRes = state.isHiRes,
                         isHiFi = state.isHiFi,
-                        isPlaying = state.isPlaying,
+                        isHq = state.isHq,
                         trackFormat = state.trackFormat,
                         sampleRateAndBitDepth = state.trackSampleRateAndBitDepth,
                         bitrateKbps = state.trackBitrateKbps,
+                        dynamicBackgroundEnabled = state.dynamicBackgroundEnabled,
                         onClick = {
                             haptics.click()
                             callbacks.onOpenStats()

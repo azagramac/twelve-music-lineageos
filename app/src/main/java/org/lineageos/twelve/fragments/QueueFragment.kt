@@ -74,6 +74,7 @@ class QueueFragment : Fragment(R.layout.fragment_queue) {
                         artistName = mediaItem.mediaMetadata.artist?.toString(),
                         durationMs = mediaItem.mediaMetadata.durationMs,
                         mimeType = mediaItem.localConfiguration?.mimeType,
+                        playbackUri = mediaItem.localConfiguration?.uri,
                         isCurrent = isCurrent,
                         showDragHandle = true,
                         onClick = {
