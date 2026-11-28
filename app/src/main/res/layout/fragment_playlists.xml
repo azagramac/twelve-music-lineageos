@@ -9,19 +9,10 @@
     android:layout_height="match_parent"
     android:orientation="vertical">
 
-    <HorizontalScrollView
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/sortingComposeView"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:clipToPadding="false"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="8dp">
-
-        <org.lineageos.twelve.ui.views.SortingChip
-            android:id="@+id/sortingChip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content" />
-
-    </HorizontalScrollView>
+        android:layout_height="wrap_content" />
 
     <FrameLayout
         android:layout_width="match_parent"
@@ -61,11 +52,10 @@
 
         </LinearLayout>
 
-        <com.google.android.material.progressindicator.LinearProgressIndicator
-            android:id="@+id/linearProgressIndicator"
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/loadingComposeView"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:indeterminate="true" />
+            android:layout_height="wrap_content" />
 
     </FrameLayout>
 

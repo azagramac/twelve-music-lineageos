@@ -54,6 +54,7 @@ data class OutputConfiguration(
         val channelCount: Int?,
         val peakBitrateBps: Int?,
         val averageBitrateBps: Int?,
+        val bitDepth: Int? = null,
     )
 
     /**
@@ -74,6 +75,7 @@ data class OutputConfiguration(
         val sampleRateHz: Int?,
         val channelCount: Int?,
         val bitrateBps: Int?,
+        val bitDepth: Int? = null,
     ) {
         /**
          * Audio output mode.
@@ -93,6 +95,11 @@ data class OutputConfiguration(
              * The audio sink plays encoded audio in passthrough.
              */
             PASSTHROUGH,
+
+            /**
+             * The audio sink bypasses the system mixer in exclusive direct / bit-perfect mode.
+             */
+            DIRECT,
         }
     }
 

@@ -6,6 +6,8 @@
 package org.lineageos.twelve.viewmodels
 
 import android.app.Application
+import android.icu.text.DecimalFormat
+import android.icu.text.DecimalFormatSymbols
 import android.os.Bundle
 import androidx.core.net.toUri
 import androidx.lifecycle.viewModelScope
@@ -19,6 +21,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -28,6 +31,8 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
+import java.util.Locale
+import kotlin.math.roundToInt
 import me.bogerchan.niervisualizer.renderer.IRenderer
 import me.bogerchan.niervisualizer.renderer.circle.CircleBarRenderer
 import me.bogerchan.niervisualizer.renderer.circle.CircleRenderer
@@ -53,6 +58,7 @@ import org.lineageos.twelve.models.FlowResult
 import org.lineageos.twelve.models.FlowResult.Companion.asFlowResult
 import org.lineageos.twelve.models.FlowResult.Companion.flatMapLatestData
 import org.lineageos.twelve.models.FlowResult.Companion.getOrNull
+import org.lineageos.twelve.models.OutputConfiguration
 import org.lineageos.twelve.models.PlaybackState
 import org.lineageos.twelve.models.RepeatMode
 import org.lineageos.twelve.models.Result
@@ -401,10 +407,12 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
     private val outputTranscoding = combine(
         outputConfigurationRepository.audioTrackConfig,
         outputConfigurationRepository.format,
-    ) { audioTrackConfig, format ->
+        outputConfigurationRepository.directOutputActive,
+    ) { audioTrackConfig, format, directOutputActive ->
         OutputConfigurationUtils.buildOutputTranscoding(
             audioTrackConfig = audioTrackConfig,
             format = format,
+            directOutputActive = directOutputActive,
         )
     }
         .flowOn(Dispatchers.IO)
@@ -432,6 +440,104 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
             started = SharingStarted.WhileSubscribed(),
             initialValue = null
         )
+
+    /**
+     * Reactive Hi-Fi track format label (e.g., "FLAC", "AAC", "WAV", "ALAC").
+     */
+    val trackFormat: StateFlow<String?> = displayFileType
+
+    /**
+     * Reactive Hi-Fi track bitrate in kbps (e.g., 912).
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    val trackBitrateKbps: StateFlow<Int?> = combine(
+        currentTrackFormat,
+        outputConfiguration,
+    ) { format, config ->
+        val rawBps = config?.source?.averageBitrateBps?.takeIf { it > 0 }
+            ?: config?.source?.peakBitrateBps?.takeIf { it > 0 }
+            ?: format?.averageBitrate?.takeIf { it > 0 }
+            ?: format?.peakBitrate?.takeIf { it > 0 }
+            ?: format?.bitrate?.takeIf { it > 0 }
+            ?: config?.transcoding?.bitrateBps?.takeIf { it > 0 }
+
+        when {
+            rawBps != null -> (rawBps / 1000f).roundToInt()
+            else -> {
+                val sampleRate = config?.source?.sampleRateHz ?: format?.sampleRate?.takeIf { it > 0 }
+                val channels = config?.source?.channelCount ?: format?.channelCount?.takeIf { it > 0 }
+                val bitDepth = config?.source?.bitDepth ?: config?.transcoding?.bitDepth
+                if (sampleRate != null && channels != null && bitDepth != null) {
+                    (sampleRate.toLong() * channels * bitDepth / 1000L).toInt()
+                } else {
+                    null
+                }
+            }
+        }
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null
+        )
+
+    /**
+     * Reactive Hi-Fi track sample rate & bit depth formatted string (e.g., "24-bit / 96 kHz").
+     */
+    @androidx.annotation.OptIn(UnstableApi::class)
+    val trackSampleRateAndBitDepth: StateFlow<String?> = combine(
+        currentTrackFormat,
+        outputConfiguration,
+    ) { format, config ->
+        val bitDepth = config?.source?.bitDepth ?: config?.transcoding?.bitDepth
+        val sampleRateHz = config?.source?.sampleRateHz
+            ?: format?.sampleRate?.takeIf { it > 0 }
+            ?: config?.transcoding?.sampleRateHz
+
+        val bitDepthText = bitDepth?.let { "$it-bit" }
+        val sampleRateText = sampleRateHz?.let {
+            "${sampleRateDecimalFormat.format(it / 1000f)} kHz"
+        }
+
+        listOfNotNull(bitDepthText, sampleRateText)
+            .takeIf { it.isNotEmpty() }
+            ?.joinToString(" / ")
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null
+        )
+
+    /**
+     * Reactive boolean indicating whether the current track qualifies as Hi-Fi
+     * (Lossless format such as FLAC/ALAC/WAV/PCM/DSD or bit depth >= 24-bit).
+     */
+    val isHiFi: StateFlow<Boolean> = combine(
+        outputConfiguration,
+        mimeType,
+        currentTrackFormat,
+    ) { config, mime, _ ->
+        val compression = config?.source?.compression
+        val isLosslessCompression = compression == OutputConfiguration.Compression.LOSSLESS ||
+            compression == OutputConfiguration.Compression.UNCOMPRESSED
+        val bitDepth = config?.source?.bitDepth ?: config?.transcoding?.bitDepth ?: 0
+        isLosslessCompression || MimeUtils.isLosslessMimeType(mime) || bitDepth >= 24
+    }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = false
+        )
+
+    /**
+     * Returns true if the current playing track is Lossless (FLAC, ALAC, WAV, PCM, DSD)
+     * or has a bit depth >= 24-bit.
+     */
+    fun isHiFi(): Boolean = isHiFi.value
 
     fun togglePlayPause() {
         mediaController.value?.let {
@@ -482,5 +588,12 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
                 mediaRepository.setFavorite(it.uri, !it.isFavorite)
             }
         }
+    }
+
+    companion object {
+        private val sampleRateDecimalFormat = DecimalFormat(
+            "0.#",
+            DecimalFormatSymbols(Locale.ROOT),
+        )
     }
 }

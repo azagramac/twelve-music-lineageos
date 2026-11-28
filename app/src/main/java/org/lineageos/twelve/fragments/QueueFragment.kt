@@ -7,6 +7,8 @@ package org.lineageos.twelve.fragments
 
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.widget.NestedScrollView
@@ -27,10 +29,10 @@ import org.lineageos.twelve.R
 import org.lineageos.twelve.ext.getViewProperty
 import org.lineageos.twelve.ext.updatePadding
 import org.lineageos.twelve.models.QueueItem
+import org.lineageos.twelve.ui.components.TrackListItem
 import org.lineageos.twelve.ui.recyclerview.SimpleListAdapter
 import org.lineageos.twelve.ui.recyclerview.UniqueItemDiffCallback
-import org.lineageos.twelve.ui.views.ListItem
-import org.lineageos.twelve.utils.TimestampFormatter
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 import org.lineageos.twelve.viewmodels.QueueViewModel
 import java.util.Collections
 
@@ -49,38 +51,35 @@ class QueueFragment : Fragment(R.layout.fragment_queue) {
 
     // RecyclerView
     private val adapter by lazy {
-        object : SimpleListAdapter<QueueItem, ListItem>(
+        object : SimpleListAdapter<QueueItem, ComposeView>(
             UniqueItemDiffCallback(),
-            ::ListItem,
+            { context ->
+                ComposeView(context).apply {
+                    layoutParams = RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
+                }
+            },
         ) {
             var currentQueue = listOf<QueueItem>()
             var scrolled = false
 
-            override fun ViewHolder.onPrepareView() {
-                view.setTrailingIconImage(R.drawable.ic_drag_handle)
-            }
-
             override fun ViewHolder.onBindView(item: QueueItem) {
                 val (mediaItem, isCurrent) = item
 
-                view.setLeadingIconImage(
-                    when (isCurrent) {
-                        true -> R.drawable.ic_play_arrow
-                        false -> R.drawable.ic_music_note
-                    }
-                )
-                mediaItem.mediaMetadata.title?.also {
-                    view.headlineText = it
-                } ?: view.setHeadlineText(R.string.unknown)
-                mediaItem.mediaMetadata.artist?.also {
-                    view.supportingText = it
-                } ?: view.setSupportingText(R.string.artist_unknown)
-                view.trailingSupportingText = mediaItem.mediaMetadata.durationMs?.let {
-                    TimestampFormatter.formatTimestampMillis(it)
-                }
-
-                view.setOnClickListener {
-                    viewModel.playItem(bindingAdapterPosition)
+                view.setTwelveExpressiveContent {
+                    TrackListItem(
+                        title = mediaItem.mediaMetadata.title?.toString(),
+                        artistName = mediaItem.mediaMetadata.artist?.toString(),
+                        durationMs = mediaItem.mediaMetadata.durationMs,
+                        mimeType = mediaItem.localConfiguration?.mimeType,
+                        isCurrent = isCurrent,
+                        showDragHandle = true,
+                        onClick = {
+                            viewModel.playItem(bindingAdapterPosition)
+                        },
+                    )
                 }
             }
         }

@@ -47,6 +47,7 @@ import org.lineageos.twelve.MainActivity
 import org.lineageos.twelve.R
 import org.lineageos.twelve.TwelveApplication
 import org.lineageos.twelve.ext.Bundle
+import org.lineageos.twelve.ext.enableDirectOutput
 import org.lineageos.twelve.ext.enableFloatOutput
 import org.lineageos.twelve.ext.enableOffload
 import org.lineageos.twelve.ext.mapAsync
@@ -68,6 +69,14 @@ class PlaybackService : MediaLibraryService() {
          * - [CustomCommand.ARG_VALUE] ([Boolean]): Whether to enable or disable offload
          */
         TOGGLE_OFFLOAD,
+
+        /**
+         * Toggles exclusive direct output (bit-perfect mode).
+         *
+         * Arguments:
+         * - [CustomCommand.ARG_VALUE] ([Boolean]): Whether to enable or disable direct output
+         */
+        TOGGLE_DIRECT_OUTPUT,
 
         /**
          * Toggles skip silence.
@@ -167,6 +176,7 @@ class PlaybackService : MediaLibraryService() {
 
     private lateinit var player: ExoPlayer
     private lateinit var mediaLibrarySession: MediaLibrarySession
+    private lateinit var renderersFactory: TwelveRenderersFactory
 
     private val mediaRepositoryTree by lazy {
         MediaRepositoryTree(
@@ -375,16 +385,28 @@ class PlaybackService : MediaLibraryService() {
         ) = lifecycleScope.future {
             when (CustomCommand.fromCustomAction(customCommand.customAction)) {
                 CustomCommand.TOGGLE_OFFLOAD -> {
-                    args.getBoolean(CustomCommand.ARG_VALUE).let {
+                    args.getBoolean(CustomCommand.ARG_VALUE).let { enabled ->
                         player.trackSelectionParameters =
                             player.trackSelectionParameters.buildUpon()
                                 .setAudioOffloadPreferences(
-                                    TrackSelectionParameters.AudioOffloadPreferences
-                                        .Builder()
-                                        .setAudioOffloadMode(
-                                            getOffloadMode(it)
-                                        )
-                                        .build()
+                                    buildAudioOffloadPreferences(
+                                        enabled && !sharedPreferences.enableDirectOutput
+                                    )
+                                ).build()
+                    }
+
+                    SessionResult(SessionResult.RESULT_SUCCESS)
+                }
+
+                CustomCommand.TOGGLE_DIRECT_OUTPUT -> {
+                    args.getBoolean(CustomCommand.ARG_VALUE).let { enabled ->
+                        renderersFactory.setDirectOutputEnabled(enabled)
+                        player.trackSelectionParameters =
+                            player.trackSelectionParameters.buildUpon()
+                                .setAudioOffloadPreferences(
+                                    buildAudioOffloadPreferences(
+                                        sharedPreferences.enableOffload && !enabled
+                                    )
                                 ).build()
                     }
 
@@ -438,30 +460,34 @@ class PlaybackService : MediaLibraryService() {
             .setUsage(C.USAGE_MEDIA)
             .build()
 
+        renderersFactory = TwelveRenderersFactory(
+            context = this,
+            enableAudioFloatOutput = sharedPreferences.enableFloatOutput,
+            enableDirectOutput = sharedPreferences.enableDirectOutput,
+            onAudioDeviceInfoChanged = {
+                outputConfigurationRepository.updateAudioDeviceInfo(it)
+            },
+            onAudioTrackConfigChanged = {
+                outputConfigurationRepository.updateAudioTrackConfig(it)
+            },
+            onDirectOutputActiveChanged = {
+                outputConfigurationRepository.updateDirectOutputActive(it)
+            },
+        )
+
         player = ExoPlayer.Builder(this)
             .setAudioAttributes(audioAttributes, true)
             .setHandleAudioBecomingNoisy(true)
-            .setRenderersFactory(
-                TwelveRenderersFactory(
-                    this,
-                    sharedPreferences.enableFloatOutput,
-                    onAudioDeviceInfoChanged = {
-                        outputConfigurationRepository.updateAudioDeviceInfo(it)
-                    },
-                    onAudioTrackConfigChanged = {
-                        outputConfigurationRepository.updateAudioTrackConfig(it)
-                    },
-                )
-            )
+            .setRenderersFactory(renderersFactory)
             .setTrackSelector(DefaultTrackSelector(this).apply {
                 setParameters(
                     buildUponParameters()
                         .setAllowInvalidateSelectionsOnRendererCapabilitiesChange(true)
                         .setAudioOffloadPreferences(
-                            TrackSelectionParameters.AudioOffloadPreferences.Builder()
-                                .setAudioOffloadMode(
-                                    getOffloadMode(sharedPreferences.enableOffload)
-                                ).build()
+                            buildAudioOffloadPreferences(
+                                sharedPreferences.enableOffload &&
+                                    !sharedPreferences.enableDirectOutput
+                            )
                         )
                 )
             })
@@ -692,6 +718,13 @@ class PlaybackService : MediaLibraryService() {
         )
         player.prepare()
     }
+
+    private fun buildAudioOffloadPreferences(enabled: Boolean) =
+        TrackSelectionParameters.AudioOffloadPreferences.Builder()
+            .setAudioOffloadMode(getOffloadMode(enabled))
+            .setIsGaplessSupportRequired(false)
+            .setIsSpeedChangeSupportRequired(false)
+            .build()
 
     private fun getOffloadMode(enabled: Boolean) = if (enabled) {
         TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_ENABLED

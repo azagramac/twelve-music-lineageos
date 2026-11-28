@@ -62,6 +62,16 @@ var SharedPreferences.enableFloatOutput: Boolean
         putBoolean(ENABLE_FLOAT_OUTPUT_KEY, value)
     }
 
+const val ENABLE_DIRECT_OUTPUT_KEY = "enable_direct_output"
+private const val ENABLE_DIRECT_OUTPUT_DEFAULT = false
+var SharedPreferences.enableDirectOutput: Boolean
+    get() = getBoolean(ENABLE_DIRECT_OUTPUT_KEY, ENABLE_DIRECT_OUTPUT_DEFAULT)
+    set(value) = edit {
+        putBoolean(ENABLE_DIRECT_OUTPUT_KEY, value)
+    }
+val SharedPreferences.enableDirectOutputFlow
+    get() = preferenceFlow(ENABLE_DIRECT_OUTPUT_KEY) { enableDirectOutput }
+
 private const val STOP_PLAYBACK_ON_TASK_REMOVED_KEY = "stop_playback_on_task_removed"
 private const val STOP_PLAYBACK_ON_TASK_REMOVED_DEFAULT = true
 var SharedPreferences.stopPlaybackOnTaskRemoved: Boolean

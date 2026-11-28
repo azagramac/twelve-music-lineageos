@@ -9,9 +9,11 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.ui.platform.ComposeView
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -45,14 +47,14 @@ import org.lineageos.twelve.models.Audio
 import org.lineageos.twelve.models.Error
 import org.lineageos.twelve.models.FlowResult
 import org.lineageos.twelve.models.Playlist
+import org.lineageos.twelve.ui.components.TrackListItem
 import org.lineageos.twelve.ui.dialogs.EditTextMaterialAlertDialogBuilder
 import org.lineageos.twelve.ui.recyclerview.SimpleListAdapter
 import org.lineageos.twelve.ui.recyclerview.UniqueItemDiffCallback
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 import org.lineageos.twelve.ui.views.FullscreenLoadingProgressBar
-import org.lineageos.twelve.ui.views.ListItem
 import org.lineageos.twelve.utils.PermissionsChecker
 import org.lineageos.twelve.utils.PermissionsUtils
-import org.lineageos.twelve.utils.TimestampFormatter
 import org.lineageos.twelve.viewmodels.PlaylistViewModel
 
 /**
@@ -86,35 +88,37 @@ class PlaylistFragment : CollapsingToolbarLayoutFragment(R.layout.fragment_playl
 
     // Recyclerview
     private val adapter by lazy {
-        object : SimpleListAdapter<Audio, ListItem>(
+        object : SimpleListAdapter<Audio, ComposeView>(
             UniqueItemDiffCallback(),
-            ::ListItem,
-        ) {
-            override fun ViewHolder.onPrepareView() {
-                view.setLeadingIconImage(R.drawable.ic_music_note)
-            }
-
-            override fun ViewHolder.onBindView(item: Audio) {
-                view.setOnClickListener {
-                    viewModel.playPlaylist(bindingAdapterPosition)
-                }
-                view.setOnLongClickListener {
-                    findNavController().navigateSafe(
-                        R.id.action_playlistFragment_to_fragment_media_item_bottom_sheet_dialog,
-                        MediaItemBottomSheetDialogFragment.createBundle(
-                            item.uri,
-                            playlistUri = playlistUri,
-                        )
+            { context ->
+                ComposeView(context).apply {
+                    layoutParams = RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
                     )
-                    true
                 }
-
-                view.headlineText = item.title
-                item.artistName?.also {
-                    view.supportingText = it
-                } ?: view.setSupportingText(R.string.artist_unknown)
-                view.trailingSupportingText = item.durationMs?.let {
-                    TimestampFormatter.formatTimestampMillis(it)
+            },
+        ) {
+            override fun ViewHolder.onBindView(item: Audio) {
+                view.setTwelveExpressiveContent {
+                    TrackListItem(
+                        title = item.title,
+                        artistName = item.artistName,
+                        durationMs = item.durationMs,
+                        mimeType = item.mimeType,
+                        onClick = {
+                            viewModel.playPlaylist(bindingAdapterPosition)
+                        },
+                        onLongClick = {
+                            findNavController().navigateSafe(
+                                R.id.action_playlistFragment_to_fragment_media_item_bottom_sheet_dialog,
+                                MediaItemBottomSheetDialogFragment.createBundle(
+                                    item.uri,
+                                    playlistUri = playlistUri,
+                                )
+                            )
+                        },
+                    )
                 }
             }
         }

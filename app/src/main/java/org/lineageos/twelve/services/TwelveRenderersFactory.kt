@@ -18,14 +18,23 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 @OptIn(UnstableApi::class)
 class TwelveRenderersFactory(
     context: Context,
-    enableAudioFloatOutput: Boolean,
+    private val enableAudioFloatOutput: Boolean,
+    private var enableDirectOutput: Boolean = false,
     private val onAudioDeviceInfoChanged: (AudioDeviceInfo?) -> Unit,
     private val onAudioTrackConfigChanged: (AudioSink.AudioTrackConfig?) -> Unit,
+    private val onDirectOutputActiveChanged: (Boolean) -> Unit = {},
 ) : DefaultRenderersFactory(context) {
+    private var audioSink: TwelveAudioSink? = null
+
     init {
         setEnableAudioFloatOutput(enableAudioFloatOutput)
-        setEnableAudioOutputPlaybackParameters(true)
+        setEnableAudioOutputPlaybackParameters(!enableDirectOutput)
         setExtensionRendererMode(EXTENSION_RENDERER_MODE_ON)
+    }
+
+    fun setDirectOutputEnabled(enabled: Boolean) {
+        enableDirectOutput = enabled
+        audioSink?.setDirectOutputEnabled(enabled)
     }
 
     override fun buildAudioSink(
@@ -33,16 +42,23 @@ class TwelveRenderersFactory(
         enableFloatOutput: Boolean,
         enableAudioTrackPlaybackParams: Boolean
     ) = TwelveAudioSink(
-        DefaultAudioSink.Builder(context)
-            .setEnableFloatOutput(enableFloatOutput)
-            .setEnableAudioOutputPlaybackParameters(enableAudioTrackPlaybackParams)
+        context = context,
+        defaultAudioSink = DefaultAudioSink.Builder(context)
+            .setEnableFloatOutput(enableFloatOutput || enableAudioFloatOutput)
+            .setEnableAudioOutputPlaybackParameters(
+                enableAudioTrackPlaybackParams && !enableDirectOutput
+            )
             .setAudioOutputProvider(
                 AudioTrackAudioOutputProvider.Builder(context)
                     .setAudioOffloadSupportProvider(DefaultAudioOffloadSupportProvider(context))
                     .build()
             )
             .build(),
-        onAudioDeviceInfoChanged,
-        onAudioTrackConfigChanged,
-    )
+        initialDirectOutputEnabled = enableDirectOutput,
+        onAudioDeviceInfoChanged = onAudioDeviceInfoChanged,
+        onAudioTrackConfigChanged = onAudioTrackConfigChanged,
+        onDirectOutputActiveChanged = onDirectOutputActiveChanged,
+    ).also {
+        audioSink = it
+    }
 }

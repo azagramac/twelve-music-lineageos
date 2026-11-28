@@ -5,6 +5,7 @@
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.lineageos.generatebp)
@@ -12,7 +13,7 @@ plugins {
 
 android {
     namespace = "org.lineageos.twelve"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "org.lineageos.twelve"
@@ -65,6 +66,10 @@ android {
         }
     }
 
+    buildFeatures {
+        compose = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -79,10 +84,18 @@ kapt {
 
 dependencies {
     implementation(libs.androidx.activity)
+    implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.compose.animation)
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.fragment.ktx)
+    implementation(libs.androidx.graphics.shapes)
     implementation(libs.androidx.lifecycle.service)
     implementation(libs.androidx.media3.common.ktx)
     implementation(libs.androidx.media3.exoplayer)
@@ -102,6 +115,7 @@ dependencies {
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.viewpager2)
     implementation(libs.coil)
+    implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.kotlinx.serialization.json)

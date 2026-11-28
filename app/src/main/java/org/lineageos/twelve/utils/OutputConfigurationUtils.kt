@@ -93,21 +93,27 @@ object OutputConfigurationUtils {
             compression = mimeTypeToCompression[streamMimeType] ?: encoding?.compression,
             peakBitrateBps = peakBitrate.takeIf { it != Format.NO_VALUE },
             averageBitrateBps = averageBitrate.takeIf { it != Format.NO_VALUE },
+            bitDepth = encoding?.let { pcmEncodingBitDepths[it] },
         )
     }
 
     fun buildOutputTranscoding(
         audioTrackConfig: AudioSink.AudioTrackConfig?,
         format: Format?,
+        directOutputActive: Boolean = false,
     ): OutputConfiguration.Transcoding? {
         audioTrackConfig ?: return null
+        val encoding = encodingFromMedia3Encoding(audioTrackConfig.encoding)
 
         return OutputConfiguration.Transcoding(
-            outputMode = outputModeFromAudioTrackConfig(audioTrackConfig),
-            encoding = encodingFromMedia3Encoding(audioTrackConfig.encoding),
-            sampleRateHz = format?.sampleRate?.takeIf { it != AudioFormat.SAMPLE_RATE_UNSPECIFIED },
+            outputMode = outputModeFromAudioTrackConfig(audioTrackConfig, directOutputActive),
+            encoding = encoding,
+            sampleRateHz = audioTrackConfig.sampleRate.takeIf {
+                it != AudioFormat.SAMPLE_RATE_UNSPECIFIED && it > 0
+            } ?: format?.sampleRate?.takeIf { it != AudioFormat.SAMPLE_RATE_UNSPECIFIED },
             channelCount = format?.channelCount?.takeIf { it != 0 },
             bitrateBps = format?.bitrate?.takeIf { it != Format.NO_VALUE },
+            bitDepth = encoding?.let { pcmEncodingBitDepths[it] },
         )
     }
 
@@ -403,7 +409,9 @@ object OutputConfigurationUtils {
 
     private fun outputModeFromAudioTrackConfig(
         audioTrackConfig: AudioSink.AudioTrackConfig,
+        directOutputActive: Boolean,
     ) = when {
+        directOutputActive -> OutputMode.DIRECT
         audioTrackConfig.offload -> OutputMode.OFFLOAD
 
         else -> when (audioTrackConfig.encoding) {

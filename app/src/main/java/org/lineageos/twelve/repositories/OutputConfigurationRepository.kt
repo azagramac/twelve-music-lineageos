@@ -27,6 +27,9 @@ class OutputConfigurationRepository {
     private val _audioTrackConfig = MutableStateFlow<AudioSink.AudioTrackConfig?>(null)
     val audioTrackConfig = _audioTrackConfig.asStateFlow()
 
+    private val _directOutputActive = MutableStateFlow(false)
+    val directOutputActive = _directOutputActive.asStateFlow()
+
     fun updateFormat(format: Format?) {
         _format.value = format
     }
@@ -38,5 +41,9 @@ class OutputConfigurationRepository {
     @androidx.annotation.OptIn(UnstableApi::class)
     fun updateAudioTrackConfig(audioTrackConfig: AudioSink.AudioTrackConfig?) {
         _audioTrackConfig.value = audioTrackConfig
+    }
+
+    fun updateDirectOutputActive(active: Boolean) {
+        _directOutputActive.value = active
     }
 }

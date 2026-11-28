@@ -115,7 +115,7 @@ class ListItem @JvmOverloads constructor(
     var trailingViewIsVisible: Boolean
         get() = trailingViewContainerFrameLayout.isVisible
         set(value) {
-            leadingViewContainerFrameLayout.updateVisibility(value)
+            trailingViewContainerFrameLayout.updateVisibility(value)
         }
 
     var isDimmed: Boolean

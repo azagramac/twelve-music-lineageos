@@ -9,9 +9,25 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.View
+import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -43,12 +59,12 @@ import org.lineageos.twelve.ext.setProgressCompat
 import org.lineageos.twelve.ext.updatePadding
 import org.lineageos.twelve.models.Error
 import org.lineageos.twelve.models.FlowResult
+import org.lineageos.twelve.ui.components.TrackListItem
 import org.lineageos.twelve.ui.recyclerview.SimpleListAdapter
 import org.lineageos.twelve.ui.recyclerview.UniqueItemDiffCallback
-import org.lineageos.twelve.ui.views.ListItem
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 import org.lineageos.twelve.utils.PermissionsChecker
 import org.lineageos.twelve.utils.PermissionsUtils
-import org.lineageos.twelve.utils.TimestampFormatter
 import org.lineageos.twelve.viewmodels.AlbumViewModel
 
 /**
@@ -80,85 +96,69 @@ class AlbumFragment : CollapsingToolbarLayoutFragment(R.layout.fragment_album) {
     private val yearTextView by getViewProperty<TextView>(R.id.yearTextView)
 
     // Recyclerview
+    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
     private val adapter by lazy {
-        object : SimpleListAdapter<AlbumViewModel.AlbumContent, ListItem>(
+        object : SimpleListAdapter<AlbumViewModel.AlbumContent, ComposeView>(
             UniqueItemDiffCallback(),
-            ::ListItem,
+            { context ->
+                ComposeView(context).apply {
+                    layoutParams = RecyclerView.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT,
+                    )
+                }
+            },
         ) {
-            private val ViewHolder.trackTextView
-                get() = view.leadingView!!.findViewById<TextView>(R.id.trackTextView)
-
-            override fun ViewHolder.onPrepareView() {
-                view.setLeadingView(R.layout.audio_track_index)
-            }
-
             override fun ViewHolder.onBindView(item: AlbumViewModel.AlbumContent) {
-                when (item) {
-                    is AlbumViewModel.AlbumContent.DiscHeader -> {
-                        view.setLeadingIconImage(R.drawable.ic_album)
-                        view.leadingViewIsVisible = false
-                        view.setHeadlineText(
-                            R.string.album_disc_header,
-                            item.discNumber,
-                        )
-                        view.supportingText = null
-                        view.trailingSupportingText = null
-                        view.isClickable = false
-                        view.isLongClickable = false
-                    }
-
-                    is AlbumViewModel.AlbumContent.AudioItem -> {
-                        view.setOnClickListener {
-                            viewModel.playAlbum(item.audio)
-                        }
-                        view.setOnLongClickListener {
-                            findNavController().navigateSafe(
-                                R.id.action_albumFragment_to_fragment_media_item_bottom_sheet_dialog,
-                                MediaItemBottomSheetDialogFragment.createBundle(
-                                    item.audio.uri,
-                                    fromAlbum = true,
+                view.setTwelveExpressiveContent {
+                    when (item) {
+                        is AlbumViewModel.AlbumContent.DiscHeader -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_album),
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
                                 )
+                                Text(
+                                    text = stringResource(
+                                        R.string.album_disc_header,
+                                        item.discNumber,
+                                    ),
+                                    style = MaterialTheme.typography.titleSmallEmphasized,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+
+                        is AlbumViewModel.AlbumContent.AudioItem -> {
+                            TrackListItem(
+                                title = item.audio.title,
+                                artistName = item.audio.artistName,
+                                durationMs = item.audio.durationMs,
+                                mimeType = item.audio.mimeType,
+                                trackNumber = item.audio.trackNumber,
+                                isCurrent = item.isCurrent,
+                                onClick = {
+                                    viewModel.playAlbum(item.audio)
+                                },
+                                onLongClick = {
+                                    findNavController().navigateSafe(
+                                        R.id.action_albumFragment_to_fragment_media_item_bottom_sheet_dialog,
+                                        MediaItemBottomSheetDialogFragment.createBundle(
+                                            item.audio.uri,
+                                            fromAlbum = true,
+                                        )
+                                    )
+                                },
                             )
-
-                            true
                         }
-
-                        when {
-                            item.isCurrent -> {
-                                view.setLeadingIconImage(R.drawable.ic_track_playing)
-                                view.headlineTextIsActivated = true
-                                view.leadingIconImageIsActivated = true
-                                view.leadingViewIsVisible = false
-                            }
-
-                            item.audio.trackNumber != null -> {
-                                view.leadingIconImage = null
-                                trackTextView.text = getString(
-                                    R.string.track_number,
-                                    item.audio.trackNumber
-                                )
-                                view.headlineTextIsActivated = false
-                                view.leadingIconImageIsActivated = false
-                                view.leadingViewIsVisible = true
-                            }
-
-                            else -> {
-                                view.setLeadingIconImage(R.drawable.ic_music_note)
-                                view.headlineTextIsActivated = false
-                                view.leadingIconImageIsActivated = false
-                                view.leadingViewIsVisible = false
-                            }
-                        }
-
-                        view.headlineText = item.audio.title
-                        item.audio.artistName?.also {
-                            view.supportingText = it
-                        } ?: view.setSupportingText(R.string.artist_unknown)
-                        view.trailingSupportingText = item.audio.durationMs?.let {
-                            TimestampFormatter.formatTimestampMillis(it)
-                        }
-                        view.isClickable = true
-                        view.isLongClickable = true
                     }
                 }
             }

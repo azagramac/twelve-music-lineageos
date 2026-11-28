@@ -11,6 +11,9 @@ import android.util.Log
 import android.view.View
 import android.widget.ImageView
 import android.widget.TextView
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.isVisible
 import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
@@ -33,6 +36,9 @@ import org.lineageos.twelve.models.Error
 import org.lineageos.twelve.models.FlowResult
 import org.lineageos.twelve.models.Genre
 import org.lineageos.twelve.models.Playlist
+import org.lineageos.twelve.ui.components.SplitButtonMenuAction
+import org.lineageos.twelve.ui.components.TrackActionSplitButton
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 import org.lineageos.twelve.ui.views.FullscreenLoadingProgressBar
 import org.lineageos.twelve.ui.views.ListItem
 import org.lineageos.twelve.utils.PermissionsChecker
@@ -62,6 +68,7 @@ class MediaItemBottomSheetDialogFragment : TwelveBottomSheetDialogFragment(
     private val playNowListItem by getViewProperty<ListItem>(R.id.playNowListItem)
     private val playNextListItem by getViewProperty<ListItem>(R.id.playNextListItem)
     private val removeFromPlaylistListItem by getViewProperty<ListItem>(R.id.removeFromPlaylistListItem)
+    private val splitActionsComposeView by getViewProperty<ComposeView>(R.id.splitActionsComposeView)
     private val thumbnailImageView by getViewProperty<ImageView>(R.id.thumbnailImageView)
     private val titleTextView by getViewProperty<TextView>(R.id.titleTextView)
 
@@ -166,6 +173,105 @@ class MediaItemBottomSheetDialogFragment : TwelveBottomSheetDialogFragment(
                 findNavController().navigateSafe(
                     R.id.action_mediaItemBottomSheetDialogFragment_to_fragment_genre,
                     GenreFragment.createBundle(genreUri)
+                )
+            }
+        }
+
+        splitActionsComposeView.setTwelveExpressiveContent {
+            val canAddToPlaylists by viewModel.canAddOrRemoveFromPlaylists.collectAsState()
+            val showQueueButtons by viewModel.showQueueButtons.collectAsState()
+            val albumUri by viewModel.albumUri.collectAsState()
+            val artistUri by viewModel.artistUri.collectAsState()
+            val genreUri by viewModel.genreUri.collectAsState()
+
+            val secondaryActions = buildList {
+                if (showQueueButtons) {
+                    add(
+                        SplitButtonMenuAction(
+                            label = getString(R.string.action_play),
+                            iconRes = R.drawable.ic_play_arrow,
+                            onClick = {
+                                viewModel.playNow()
+                                findNavController().navigateUp()
+                            },
+                        )
+                    )
+                    add(
+                        SplitButtonMenuAction(
+                            label = getString(R.string.audio_add_to_queue),
+                            iconRes = R.drawable.ic_add_to_queue,
+                            onClick = {
+                                viewModel.addToQueue()
+                                findNavController().navigateUp()
+                            },
+                        )
+                    )
+                    add(
+                        SplitButtonMenuAction(
+                            label = getString(R.string.audio_play_next),
+                            iconRes = R.drawable.ic_queue_play_next,
+                            onClick = {
+                                viewModel.playNext()
+                                findNavController().navigateUp()
+                            },
+                        )
+                    )
+                }
+                albumUri?.let { target ->
+                    add(
+                        SplitButtonMenuAction(
+                            label = getString(R.string.open_album),
+                            iconRes = R.drawable.ic_album,
+                            onClick = {
+                                findNavController().navigateSafe(
+                                    R.id.action_mediaItemBottomSheetDialogFragment_to_fragment_album,
+                                    AlbumFragment.createBundle(target),
+                                )
+                            },
+                        )
+                    )
+                }
+                artistUri?.let { target ->
+                    add(
+                        SplitButtonMenuAction(
+                            label = getString(R.string.open_artist),
+                            iconRes = R.drawable.ic_person,
+                            onClick = {
+                                findNavController().navigateSafe(
+                                    R.id.action_mediaItemBottomSheetDialogFragment_to_fragment_artist,
+                                    ArtistFragment.createBundle(target),
+                                )
+                            },
+                        )
+                    )
+                }
+                genreUri?.let { target ->
+                    add(
+                        SplitButtonMenuAction(
+                            label = getString(R.string.open_genre),
+                            iconRes = R.drawable.ic_genres,
+                            onClick = {
+                                findNavController().navigateSafe(
+                                    R.id.action_mediaItemBottomSheetDialogFragment_to_fragment_genre,
+                                    GenreFragment.createBundle(target),
+                                )
+                            },
+                        )
+                    )
+                }
+            }
+
+            if (canAddToPlaylists) {
+                TrackActionSplitButton(
+                    onPrimaryClick = {
+                        viewModel.uri.value?.let {
+                            findNavController().navigateSafe(
+                                R.id.action_mediaItemBottomSheetDialogFragment_to_fragment_add_or_remove_from_playlists,
+                                AddOrRemoveFromPlaylistsFragment.createBundle(it),
+                            )
+                        }
+                    },
+                    secondaryActions = secondaryActions,
                 )
             }
         }
@@ -303,7 +409,8 @@ class MediaItemBottomSheetDialogFragment : TwelveBottomSheetDialogFragment(
 
         launch {
             viewModel.canAddOrRemoveFromPlaylists.collectLatest { canAddOrRemoveFromPlaylists ->
-                addOrRemoveFromPlaylistsListItem.isVisible = canAddOrRemoveFromPlaylists
+                splitActionsComposeView.isVisible = canAddOrRemoveFromPlaylists
+                addOrRemoveFromPlaylistsListItem.isVisible = false
             }
         }
 
