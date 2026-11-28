@@ -166,6 +166,9 @@ class NowPlayingStatsBottomSheetDialogFragment : TwelveBottomSheetDialogFragment
                                 OutputConfiguration.Transcoding.OutputMode.PASSTHROUGH ->
                                     R.drawable.ic_double_arrow
 
+                                OutputConfiguration.Transcoding.OutputMode.DIRECT ->
+                                    R.drawable.ic_high_res
+
                                 null -> R.drawable.ic_conversion_path
                             }
                         )
@@ -200,6 +203,9 @@ class NowPlayingStatsBottomSheetDialogFragment : TwelveBottomSheetDialogFragment
 
                                 OutputConfiguration.Transcoding.OutputMode.PASSTHROUGH ->
                                     R.string.audio_output_mode_passthrough
+
+                                OutputConfiguration.Transcoding.OutputMode.DIRECT ->
+                                    R.string.audio_output_mode_direct
 
                                 null -> R.string.audio_output_mode_unknown
                             }

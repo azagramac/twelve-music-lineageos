@@ -11,6 +11,11 @@ import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
@@ -21,22 +26,23 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.lineageos.twelve.R
 import org.lineageos.twelve.ext.getViewProperty
 import org.lineageos.twelve.ext.navigateSafe
-import org.lineageos.twelve.ext.setProgressCompat
 import org.lineageos.twelve.ext.updatePadding
 import org.lineageos.twelve.models.FlowResult
 import org.lineageos.twelve.models.Playlist
+import org.lineageos.twelve.models.SortingRule
 import org.lineageos.twelve.models.SortingStrategy
+import org.lineageos.twelve.ui.components.ExpressiveLinearWavyLoadingBar
+import org.lineageos.twelve.ui.components.SortingButtonGroup
 import org.lineageos.twelve.ui.recyclerview.SimpleListAdapter
 import org.lineageos.twelve.ui.recyclerview.UniqueItemDiffCallback
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 import org.lineageos.twelve.ui.views.ListItem
-import org.lineageos.twelve.ui.views.SortingChip
 import org.lineageos.twelve.utils.PermissionsChecker
 import org.lineageos.twelve.utils.PermissionsUtils
 import org.lineageos.twelve.viewmodels.PlaylistsViewModel
@@ -50,10 +56,12 @@ class PlaylistsFragment : Fragment(R.layout.fragment_playlists) {
 
     // Views
     private val createNewPlaylistButton by getViewProperty<Button>(R.id.createNewPlaylistButton)
-    private val linearProgressIndicator by getViewProperty<LinearProgressIndicator>(R.id.linearProgressIndicator)
+    private val loadingComposeView by getViewProperty<ComposeView>(R.id.loadingComposeView)
     private val noElementsLinearLayout by getViewProperty<LinearLayout>(R.id.noElementsLinearLayout)
     private val recyclerView by getViewProperty<RecyclerView>(R.id.recyclerView)
-    private val sortingChip by getViewProperty<SortingChip>(R.id.sortingChip)
+    private val sortingComposeView by getViewProperty<ComposeView>(R.id.sortingComposeView)
+
+    private var isLoading by mutableStateOf(true)
 
     // Recyclerview
     private val addNewPlaylistItem = Playlist.Builder(Uri.EMPTY).build()
@@ -134,16 +142,26 @@ class PlaylistsFragment : Fragment(R.layout.fragment_playlists) {
             windowInsets
         }
 
-        sortingChip.setSortingStrategies(
-            sortedMapOf(
-                SortingStrategy.CREATION_DATE to R.string.sort_by_creation_date,
-                SortingStrategy.MODIFICATION_DATE to R.string.sort_by_last_modified,
-                SortingStrategy.NAME to R.string.sort_by_name,
-                SortingStrategy.PLAY_COUNT to R.string.sort_by_play_count,
-            )
+        val strategies = listOf(
+            SortingStrategy.CREATION_DATE to getString(R.string.sort_by_creation_date),
+            SortingStrategy.MODIFICATION_DATE to getString(R.string.sort_by_last_modified),
+            SortingStrategy.NAME to getString(R.string.sort_by_name),
+            SortingStrategy.PLAY_COUNT to getString(R.string.sort_by_play_count),
         )
-        sortingChip.setOnSortingRuleSelectedListener {
-            viewModel.setSortingRule(it)
+        sortingComposeView.setTwelveExpressiveContent {
+            val currentRule by viewModel.sortingRule.collectAsState(
+                initial = SortingRule(SortingStrategy.NAME, false)
+            )
+            SortingButtonGroup(
+                strategies = strategies,
+                currentRule = currentRule,
+                onSortingRuleChanged = viewModel::setSortingRule,
+            )
+        }
+        loadingComposeView.setTwelveExpressiveContent {
+            if (isLoading) {
+                ExpressiveLinearWavyLoadingBar()
+            }
         }
 
         recyclerView.adapter = adapter
@@ -176,7 +194,8 @@ class PlaylistsFragment : Fragment(R.layout.fragment_playlists) {
         coroutineScope {
             launch {
                 viewModel.playlists.collectLatest {
-                    linearProgressIndicator.setProgressCompat(it)
+                    isLoading = it is FlowResult.Loading
+                    loadingComposeView.isVisible = isLoading
 
                     when (it) {
                         is FlowResult.Loading -> {
@@ -213,12 +232,6 @@ class PlaylistsFragment : Fragment(R.layout.fragment_playlists) {
                             noElementsLinearLayout.isVisible = true
                         }
                     }
-                }
-            }
-
-            launch {
-                viewModel.sortingRule.collectLatest {
-                    sortingChip.setSortingRule(it)
                 }
             }
         }

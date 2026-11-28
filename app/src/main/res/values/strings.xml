@@ -95,6 +95,9 @@
     <string name="playback_warning">Speed and pitch may not work correctly while playback offload feature is enabled. Try toggling it in the app\'s settings.</string>
     <string name="visualizer">Visualizer</string>
     <string name="hi_res" translatable="false">Hi-Res</string>
+    <string name="hi_fi" translatable="false">Hi-Fi</string>
+    <string name="add_to_playlist">Add to playlist</string>
+    <string name="track_details">Track details</string>
     <string name="audio_file_type_unknown_short" translatable="false">\???</string>
 
     <!-- Now playing stats dialog fragment -->
@@ -117,6 +120,7 @@
     <string name="audio_output_mode_pcm">PCM</string>
     <string name="audio_output_mode_offload">Offload</string>
     <string name="audio_output_mode_passthrough">Passthrough</string>
+    <string name="audio_output_mode_direct">Direct (Bit-Perfect)</string>
     <string name="audio_bitrate">Bitrate</string>
     <string name="audio_peak_bitrate">Peak bitrate</string>
     <string name="audio_average_bitrate">Average bitrate</string>
@@ -203,6 +207,8 @@
     <string name="enable_offload_summary">Use the offload audio path for audio playback. Disabling this may increase power usage but can be useful if you experience issues with audio playback or post processing</string>
     <string name="enable_float_output">Enable 32-bit floating point output</string>
     <string name="enable_float_output_summary">Use 32-bit PCM floating point output when the audio quality can benefit from it. Audio effects like speed and pitch controls will stop working in this mode. Toggling this option requires an app restart</string>
+    <string name="enable_direct_output">Exclusive direct output (Bit-Perfect)</string>
+    <string name="enable_direct_output_summary">Bypass the Android audio mixer when supported by your USB DAC or output hardware to deliver bit-perfect native audio</string>
     <string name="stop_playback_on_task_removed">Stop playback on app\'s removal from recents</string>
     <string name="stop_playback_on_task_removed_summary">Stop playback when the app is cleared from recents</string>
     <string name="skip_silence">Skip silence</string>

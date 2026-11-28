@@ -31,6 +31,13 @@
             app:title="@string/enable_float_output" />
 
         <SwitchPreference
+            app:defaultValue="false"
+            app:iconSpaceReserved="false"
+            app:key="enable_direct_output"
+            app:summary="@string/enable_direct_output_summary"
+            app:title="@string/enable_direct_output" />
+
+        <SwitchPreference
             app:defaultValue="true"
             app:iconSpaceReserved="false"
             app:key="stop_playback_on_task_removed"

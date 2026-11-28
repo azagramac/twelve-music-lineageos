@@ -91,6 +91,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
 
+        <androidx.compose.ui.platform.ComposeView
+            android:id="@+id/splitActionsComposeView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingHorizontal="12dp"
+            android:paddingTop="12dp"
+            android:paddingBottom="4dp" />
+
         <org.lineageos.twelve.ui.views.ListItem
             android:id="@+id/playNowListItem"
             android:layout_width="match_parent"

@@ -35,6 +35,18 @@ class SettingsViewModel(application: Application) : TwelveViewModel(application)
     }
 
     @OptIn(UnstableApi::class)
+    suspend fun toggleDirectOutput(directOutput: Boolean) {
+        withMediaController {
+            sendCustomCommand(
+                PlaybackService.CustomCommand.TOGGLE_DIRECT_OUTPUT,
+                Bundle {
+                    putBoolean(PlaybackService.CustomCommand.ARG_VALUE, directOutput)
+                }
+            )
+        }
+    }
+
+    @OptIn(UnstableApi::class)
     suspend fun toggleSkipSilence(skipSilence: Boolean) {
         withMediaController {
             sendCustomCommand(

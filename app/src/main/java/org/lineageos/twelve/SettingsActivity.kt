@@ -29,6 +29,7 @@ import com.google.android.material.appbar.AppBarLayout
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
+import org.lineageos.twelve.ext.ENABLE_DIRECT_OUTPUT_KEY
 import org.lineageos.twelve.ext.ENABLE_OFFLOAD_KEY
 import org.lineageos.twelve.ext.SKIP_SILENCE_KEY
 import org.lineageos.twelve.ext.setOffset
@@ -145,6 +146,7 @@ class SettingsActivity : AppCompatActivity(R.layout.activity_settings) {
 
     class RootSettingsFragment : SettingsFragment(R.xml.root_preferences) {
         // Preferences
+        private val enableDirectOutput by lazy { findPreference<SwitchPreference>(ENABLE_DIRECT_OUTPUT_KEY)!! }
         private val enableOffload by lazy { findPreference<SwitchPreference>(ENABLE_OFFLOAD_KEY)!! }
         private val rescanMediaStore by lazy { findPreference<Preference>("rescan_media_store")!! }
         private val resetLocalStats by lazy { findPreference<Preference>("reset_local_stats")!! }
@@ -152,6 +154,13 @@ class SettingsActivity : AppCompatActivity(R.layout.activity_settings) {
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             super.onCreatePreferences(savedInstanceState, rootKey)
+
+            enableDirectOutput.setOnPreferenceChangeListener { _, newValue ->
+                lifecycleScope.launch {
+                    viewModel.toggleDirectOutput(newValue as Boolean)
+                }
+                true
+            }
 
             enableOffload.setOnPreferenceChangeListener { _, newValue ->
                 lifecycleScope.launch {

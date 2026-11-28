@@ -8,25 +8,37 @@ package org.lineageos.twelve.fragments
 import android.os.Bundle
 import android.view.View
 import androidx.annotation.StringRes
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
 import androidx.fragment.app.Fragment
 import androidx.viewpager2.adapter.FragmentStateAdapter
 import androidx.viewpager2.widget.ViewPager2
-import com.google.android.material.tabs.TabLayout
-import com.google.android.material.tabs.TabLayoutMediator
 import org.lineageos.twelve.R
 import org.lineageos.twelve.ext.getViewProperty
+import org.lineageos.twelve.ui.components.LibraryTabsButtonGroup
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 
 /**
  * Music library.
  */
 class LibraryFragment : Fragment(R.layout.fragment_library) {
     // Views
-    private val tabLayout by getViewProperty<TabLayout>(R.id.tabLayout)
+    private val tabsComposeView by getViewProperty<ComposeView>(R.id.tabsComposeView)
     private val viewPager2 by getViewProperty<ViewPager2>(R.id.viewPager2)
+
+    private var selectedTabIndex by mutableIntStateOf(0)
+
+    private val pageChangeCallback = object : ViewPager2.OnPageChangeCallback() {
+        override fun onPageSelected(position: Int) {
+            selectedTabIndex = position
+        }
+    }
 
     // ViewPager2
     private enum class Menus(
-        @StringRes val titleStringResId: Int,
+        @param:StringRes val titleStringResId: Int,
         val fragment: () -> Fragment,
     ) {
         ALBUMS(
@@ -57,16 +69,23 @@ class LibraryFragment : Fragment(R.layout.fragment_library) {
             override fun createFragment(position: Int) = Menus.entries[position].fragment()
         }
         viewPager2.offscreenPageLimit = Menus.entries.size
+        viewPager2.registerOnPageChangeCallback(pageChangeCallback)
 
-        TabLayoutMediator(tabLayout, viewPager2) { tab, position ->
-            val menu = Menus.entries[position]
-
-            tab.setText(menu.titleStringResId)
-            tab.setContentDescription(menu.titleStringResId)
-        }.attach()
+        val titles = Menus.entries.map { getString(it.titleStringResId) }
+        tabsComposeView.setTwelveExpressiveContent {
+            LibraryTabsButtonGroup(
+                titles = titles,
+                selectedIndex = selectedTabIndex,
+                onTabSelected = { index ->
+                    selectedTabIndex = index
+                    viewPager2.setCurrentItem(index, true)
+                },
+            )
+        }
     }
 
     override fun onDestroyView() {
+        viewPager2.unregisterOnPageChangeCallback(pageChangeCallback)
         viewPager2.adapter = null
 
         super.onDestroyView()

@@ -10,14 +10,17 @@ import android.util.AttributeSet
 import android.view.Gravity
 import android.widget.FrameLayout
 import androidx.annotation.AttrRes
+import androidx.compose.ui.unit.dp
 import androidx.annotation.StyleRes
 import androidx.annotation.UiThread
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.isVisible
 import androidx.core.widget.ContentLoadingProgressBar
-import com.google.android.material.progressindicator.CircularProgressIndicator
+import org.lineageos.twelve.ui.components.ExpressiveCircularWavyProgress
+import org.lineageos.twelve.ui.theme.TwelveExpressiveTheme
 
 /**
- * Inspired by [ContentLoadingProgressBar].
+ * Inspired by [ContentLoadingProgressBar], backed by M3 Expressive [ComposeView].
  */
 class FullscreenLoadingProgressBar : FrameLayout {
     constructor(context: Context) : super(context)
@@ -30,8 +33,12 @@ class FullscreenLoadingProgressBar : FrameLayout {
         @StyleRes defStyleRes: Int = 0,
     ) : super(context, attrs, defStyleAttr, defStyleRes)
 
-    private val circularProgressIndicator = CircularProgressIndicator(context).apply {
-        isIndeterminate = true
+    private val progressComposeView = ComposeView(context).apply {
+        setContent {
+            TwelveExpressiveTheme {
+                ExpressiveCircularWavyProgress(size = 56.dp)
+            }
+        }
     }
 
     private var startTime = -1L
@@ -57,7 +64,7 @@ class FullscreenLoadingProgressBar : FrameLayout {
         setBackgroundColor(0x55000000)
 
         addView(
-            circularProgressIndicator,
+            progressComposeView,
             LayoutParams(
                 LayoutParams.WRAP_CONTENT,
                 LayoutParams.WRAP_CONTENT,
