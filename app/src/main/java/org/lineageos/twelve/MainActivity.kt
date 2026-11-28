@@ -259,6 +259,12 @@ class MainActivity : AppCompatActivity(R.layout.activity_main) {
         }
 
         launch {
+            nowPlayingViewModel.trackAudioSpecs.collectLatest {
+                nowPlayingBar.updateAudioSpecs(it)
+            }
+        }
+
+        launch {
             nowPlayingViewModel.mediaArtwork.collectLatest {
                 when (it) {
                     null -> {
