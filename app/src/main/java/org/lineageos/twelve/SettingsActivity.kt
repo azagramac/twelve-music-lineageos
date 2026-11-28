@@ -9,8 +9,10 @@ import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
@@ -20,14 +22,18 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -42,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,12 +59,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.preference.PreferenceManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.lineageos.twelve.ext.MUSIC_DIRECTORIES_DEFAULT
 import org.lineageos.twelve.ext.THEME_MODE_AMOLED
 import org.lineageos.twelve.ext.THEME_MODE_DARK
 import org.lineageos.twelve.ext.THEME_MODE_LIGHT
@@ -68,12 +79,15 @@ import org.lineageos.twelve.ext.enableDirectOutput
 import org.lineageos.twelve.ext.enableFloatOutput
 import org.lineageos.twelve.ext.enableOffload
 import org.lineageos.twelve.ext.fullscreenMode
+import org.lineageos.twelve.ext.musicDirectories
 import org.lineageos.twelve.ext.skipSilence
 import org.lineageos.twelve.ext.splitLocalDevices
 import org.lineageos.twelve.ext.stopPlaybackOnTaskRemoved
 import org.lineageos.twelve.ext.themeMode
 import org.lineageos.twelve.ui.haptics.rememberTwelveHaptics
 import org.lineageos.twelve.ui.theme.TwelveExpressiveTheme
+import org.lineageos.twelve.utils.AudioFolderInfo
+import org.lineageos.twelve.utils.LocalMusicFilter
 import org.lineageos.twelve.viewmodels.SettingsViewModel
 
 /**
@@ -104,6 +118,7 @@ private fun SettingsScreen(
     onNavigateUp: () -> Unit,
 ) {
     val context = LocalContext.current
+    val resources = LocalResources.current
     val prefs = remember(context) {
         PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
     }
@@ -122,9 +137,29 @@ private fun SettingsScreen(
     var skipSilence by remember { mutableStateOf(prefs.skipSilence) }
     var stopOnTaskRemoved by remember { mutableStateOf(prefs.stopPlaybackOnTaskRemoved) }
     var splitLocalDevices by remember { mutableStateOf(prefs.splitLocalDevices) }
+    var musicDirectories by remember { mutableStateOf(prefs.musicDirectories) }
 
+    var showMusicDirectoriesDialog by remember { mutableStateOf(false) }
     var showResetStatsDialog by remember { mutableStateOf(false) }
     var showRescanDialog by remember { mutableStateOf(false) }
+
+    val directoryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+    ) { treeUri ->
+        treeUri ?: return@rememberLauncherForActivityResult
+        val relPath = LocalMusicFilter.extractRelativePathFromTreeUri(treeUri)
+        if (!relPath.isNullOrBlank()) {
+            val updated = (musicDirectories + relPath).toSet()
+            musicDirectories = updated
+            prefs.musicDirectories = updated
+            haptics.click()
+            Toast.makeText(
+                context,
+                resources.getString(R.string.music_directories_added, relPath),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
 
     Scaffold(
         modifier = Modifier
@@ -312,6 +347,23 @@ private fun SettingsScreen(
             }
 
             SettingsSection(title = stringResource(R.string.settings_library_header)) {
+                val directoriesSummary = if (musicDirectories.isEmpty()) {
+                    stringResource(R.string.music_directories_summary_all)
+                } else {
+                    musicDirectories.sorted().joinToString(", ")
+                }
+
+                SettingsActionRow(
+                    title = stringResource(R.string.music_directories),
+                    summary = directoriesSummary,
+                    iconRes = R.drawable.ic_lineage_library,
+                    onClick = {
+                        haptics.click()
+                        showMusicDirectoriesDialog = true
+                    },
+                )
+
+                SectionDivider()
                 SettingsSwitchRow(
                     title = stringResource(R.string.stop_playback_on_task_removed),
                     summary = stringResource(R.string.stop_playback_on_task_removed_summary),
@@ -356,6 +408,26 @@ private fun SettingsScreen(
                 )
             }
         }
+    }
+
+    if (showMusicDirectoriesDialog) {
+        MusicDirectoriesDialog(
+            selectedDirectories = musicDirectories,
+            onUpdateDirectories = { updated ->
+                musicDirectories = updated
+                prefs.musicDirectories = updated
+            },
+            onAddFolderClick = {
+                haptics.click()
+                directoryPickerLauncher.launch(null)
+            },
+            onResetToMusicOnly = {
+                haptics.click()
+                musicDirectories = MUSIC_DIRECTORIES_DEFAULT
+                prefs.musicDirectories = MUSIC_DIRECTORIES_DEFAULT
+            },
+            onDismiss = { showMusicDirectoriesDialog = false },
+        )
     }
 
     if (showResetStatsDialog) {
@@ -493,6 +565,7 @@ private fun SettingsSwitchRow(
 private fun SettingsActionRow(
     title: String,
     @DrawableRes iconRes: Int,
+    summary: String? = null,
     onClick: () -> Unit,
 ) {
     Row(
@@ -509,10 +582,155 @@ private fun SettingsActionRow(
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp),
         )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmallEmphasized,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmallEmphasized,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            if (!summary.isNullOrBlank()) {
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
+}
+
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun MusicDirectoriesDialog(
+    selectedDirectories: Set<String>,
+    onUpdateDirectories: (Set<String>) -> Unit,
+    onAddFolderClick: () -> Unit,
+    onResetToMusicOnly: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val context = LocalContext.current
+    val haptics = rememberTwelveHaptics()
+    var detectedFolders by remember { mutableStateOf<List<AudioFolderInfo>>(emptyList()) }
+
+    LaunchedEffect(selectedDirectories) {
+        detectedFolders = withContext(Dispatchers.IO) {
+            LocalMusicFilter.queryAvailableAudioFolders(context.contentResolver)
+        }
+    }
+
+    val folderEntries = remember(detectedFolders, selectedDirectories) {
+        val map = LinkedHashMap<String, Int?>()
+        detectedFolders.forEach { map[it.relativePath] = it.trackCount }
+        selectedDirectories.sorted().forEach { customDir ->
+            if (!map.containsKey(customDir)) {
+                map[customDir] = null
+            }
+        }
+        map.entries.map { (path, count) -> path to count }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.music_directories_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = stringResource(R.string.music_directories_dialog_description),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 280.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(
+                        items = folderEntries,
+                        key = { (path, _) -> path },
+                    ) { (path, count) ->
+                        val isChecked = selectedDirectories.any {
+                            it.equals(path, ignoreCase = true)
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable {
+                                    haptics.click()
+                                    val updated = if (isChecked) {
+                                        selectedDirectories.filterNot {
+                                            it.equals(path, ignoreCase = true)
+                                        }.toSet()
+                                    } else {
+                                        (selectedDirectories + path).toSet()
+                                    }
+                                    onUpdateDirectories(updated)
+                                }
+                                .padding(horizontal = 4.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Checkbox(
+                                checked = isChecked,
+                                onCheckedChange = { checked ->
+                                    haptics.click()
+                                    val updated = if (!checked) {
+                                        selectedDirectories.filterNot {
+                                            it.equals(path, ignoreCase = true)
+                                        }.toSet()
+                                    } else {
+                                        (selectedDirectories + path).toSet()
+                                    }
+                                    onUpdateDirectories(updated)
+                                },
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = path,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                if (count != null) {
+                                    Text(
+                                        text = stringResource(
+                                            R.string.music_directories_tracks_count,
+                                            count,
+                                        ),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    TextButton(onClick = onAddFolderClick) {
+                        Text(stringResource(R.string.music_directories_add_folder))
+                    }
+                    TextButton(onClick = onResetToMusicOnly) {
+                        Text(stringResource(R.string.music_directories_reset_music))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(android.R.string.ok))
+            }
+        },
+    )
 }

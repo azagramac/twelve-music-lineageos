@@ -249,4 +249,36 @@
     <string name="song_genre">Género</string>
     <string name="song_year">Año</string>
     <string name="song_duration">Duración</string>
+
+    <string name="music_directories">Carpetas de música</string>
+    <string name="music_directories_summary_all">Todas las carpetas (sin tonos ni notificaciones)</string>
+    <string name="music_directories_dialog_title">Carpetas de música permitidas</string>
+    <string name="music_directories_dialog_description">Elige qué carpetas se muestran en tu biblioteca. Los tonos de llamada, notificaciones y alarmas del sistema siempre se excluyen. Si desmarcas todas se mostrarán todas las carpetas de música.</string>
+    <string name="music_directories_add_folder">Añadir carpeta</string>
+    <string name="music_directories_reset_music">Solo Music</string>
+    <string name="music_directories_added">Carpeta añadida: %1$s</string>
+    <string name="music_directories_tracks_count">%1$d canciones</string>
+    <string name="add_to_playlist">Añadir a lista de reproducción</string>
+    <string name="audio_output_mode_direct">Directo (Bit-Perfect)</string>
+    <string name="dynamic_background">Fondo dinámico del reproductor</string>
+    <string name="dynamic_background_summary">Mostrar un fondo dinámico basado en la carátula en Reproduciendo ahora</string>
+    <string name="dynamic_color">Color dinámico</string>
+    <string name="dynamic_color_summary">Adaptar los colores de la app al fondo de pantalla en Android 12+</string>
+    <string name="enable_direct_output">Salida directa exclusiva (Bit-Perfect)</string>
+    <string name="enable_direct_output_summary">Evitar el mezclador de audio de Android cuando tu DAC USB o hardware lo soporte para ofrecer audio bit-perfect</string>
+    <string name="library_fragment_menu_songs">Canciones</string>
+    <string name="no_songs">No hay canciones</string>
+    <string name="settings_appearance_header">Apariencia y tema</string>
+    <string name="settings_audio_header">Motor de audio Hi-Fi</string>
+    <string name="settings_library_header">Biblioteca y comportamiento</string>
+    <string name="theme_mode">Tema</string>
+    <string name="theme_mode_amoled">AMOLED</string>
+    <string name="theme_mode_dark">Oscuro</string>
+    <string name="theme_mode_light">Claro</string>
+    <string name="theme_mode_system">Sistema</string>
+    <string name="track_details">Detalles de la pista</string>
+    <string name="audio_quality_hires">Hi-Res sin pérdida</string>
+    <string name="audio_quality_hifi">Hi-Fi sin pérdida</string>
+    <string name="audio_quality_hq">Alta calidad</string>
+    <string name="audio_quality_standard">Audio estándar</string>
 </resources>

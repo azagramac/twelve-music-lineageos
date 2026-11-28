@@ -5,9 +5,11 @@
 
 package org.lineageos.twelve.repositories
 
+import android.content.ContentResolver
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.preference.PreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,13 +35,23 @@ import org.lineageos.twelve.datasources.MediaStoreDataSource
 import org.lineageos.twelve.datasources.SubsonicDataSource
 import org.lineageos.twelve.ext.DEFAULT_PROVIDER_KEY
 import org.lineageos.twelve.ext.defaultProvider
+import org.lineageos.twelve.ext.musicDirectoriesFlow
 import org.lineageos.twelve.ext.preferenceFlow
+import org.lineageos.twelve.models.ActivityTab
+import org.lineageos.twelve.models.Album
+import org.lineageos.twelve.models.Artist
+import org.lineageos.twelve.models.ArtistWorks
+import org.lineageos.twelve.models.Audio
 import org.lineageos.twelve.models.Error
+import org.lineageos.twelve.models.GenreContent
+import org.lineageos.twelve.models.MediaItem
 import org.lineageos.twelve.models.ProviderIdentifier
 import org.lineageos.twelve.models.ProviderType
 import org.lineageos.twelve.models.Result
 import org.lineageos.twelve.models.SortingRule
 import org.lineageos.twelve.models.SortingStrategy
+import org.lineageos.twelve.utils.AllowedLocalMediaSnapshot
+import org.lineageos.twelve.utils.LocalMusicFilter
 
 /**
  * Media repository. This class coordinates all the providers and their data source.
@@ -56,9 +68,22 @@ class MediaRepository(
     private val database: TwelveDatabase,
 ) {
     /**
+     * Content resolver.
+     */
+    private val contentResolver = context.contentResolver
+
+    /**
      * Shared preferences.
      */
     private val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+
+    private val musicDirectoriesFlow = sharedPreferences.musicDirectoriesFlow
+        .flowOn(Dispatchers.IO)
+        .shareIn(
+            scope,
+            SharingStarted.WhileSubscribed(),
+            replay = 1,
+        )
 
     /**
      * HTTP cache
@@ -208,15 +233,26 @@ class MediaRepository(
     /**
      * @see MediaDataSource.activity
      */
-    fun activity() = withNavigationDataSourceAndProviderFlow { activity(it) }
+    fun activity() = withNavigationMediaStoreFiltered(
+        flowProvider = { withNavigationDataSourceAndProviderFlow { activity(it) } },
+    ) { tabs, snapshot ->
+        tabs.mapNotNull { tab ->
+            val filteredItems = filterMediaItems(tab.items, snapshot)
+            tab.takeIf { filteredItems.isNotEmpty() }?.copy(items = filteredItems)
+        }
+    }
 
     /**
      * @see MediaDataSource.albums
      */
     fun albums(
         sortingRule: SortingRule = defaultAlbumsSortingRule,
-    ) = withNavigationDataSourceAndProviderFlow {
-        albums(it, sortingRule)
+    ) = withNavigationMediaStoreFiltered(
+        flowProvider = { withNavigationDataSourceAndProviderFlow { albums(it, sortingRule) } },
+    ) { albumsList, snapshot ->
+        albumsList.filter { album ->
+            LocalMusicFilter.parseMediaStoreId(album.uri) in snapshot.albumIds
+        }
     }
 
     /**
@@ -224,14 +260,24 @@ class MediaRepository(
      */
     fun artists(
         sortingRule: SortingRule = defaultArtistsSortingRule,
-    ) = withNavigationDataSourceAndProviderFlow { artists(it, sortingRule) }
+    ) = withNavigationMediaStoreFiltered(
+        flowProvider = { withNavigationDataSourceAndProviderFlow { artists(it, sortingRule) } },
+    ) { artistsList, snapshot ->
+        artistsList.filter { artist ->
+            LocalMusicFilter.parseMediaStoreId(artist.uri) in snapshot.artistIds
+        }
+    }
 
     /**
      * @see MediaDataSource.audios
      */
     fun audios(
         sortingRule: SortingRule = defaultAudiosSortingRule,
-    ) = withNavigationDataSourceAndProviderFlow { audios(it, sortingRule) }
+    ) = withNavigationMediaStoreFiltered(
+        flowProvider = { withNavigationDataSourceAndProviderFlow { audios(it, sortingRule) } },
+    ) { audiosList, snapshot ->
+        filterAudios(audiosList, snapshot)
+    }
 
     /**
      * @see MediaDataSource.genres
@@ -250,7 +296,11 @@ class MediaRepository(
     /**
      * @see MediaDataSource.search
      */
-    fun search(query: String) = withNavigationDataSourceAndProviderFlow { search(it, query) }
+    fun search(query: String) = withNavigationMediaStoreFiltered(
+        flowProvider = { withNavigationDataSourceAndProviderFlow { search(it, query) } },
+    ) { items, snapshot ->
+        filterMediaItems(items, snapshot)
+    }
 
     /**
      * @see MediaDataSource.audio
@@ -262,22 +312,46 @@ class MediaRepository(
     /**
      * @see MediaDataSource.album
      */
-    fun album(albumUri: Uri) = withMediaItemsDataSourceFlow(albumUri) {
-        album(albumUri)
+    fun album(albumUri: Uri) = withMediaStoreItemFiltered(
+        uri = albumUri,
+        flowProvider = { withMediaItemsDataSourceFlow(albumUri) { album(albumUri) } },
+    ) { (album, tracks), snapshot ->
+        album to filterAudios(tracks, snapshot)
     }
 
     /**
      * @see MediaDataSource.artist
      */
-    fun artist(artistUri: Uri) = withMediaItemsDataSourceFlow(artistUri) {
-        artist(artistUri)
+    fun artist(artistUri: Uri) = withMediaStoreItemFiltered(
+        uri = artistUri,
+        flowProvider = { withMediaItemsDataSourceFlow(artistUri) { artist(artistUri) } },
+    ) { (artist, works), snapshot ->
+        artist to ArtistWorks(
+            albums = works.albums.filter {
+                LocalMusicFilter.parseMediaStoreId(it.uri) in snapshot.albumIds
+            },
+            appearsInAlbum = works.appearsInAlbum.filter {
+                LocalMusicFilter.parseMediaStoreId(it.uri) in snapshot.albumIds
+            },
+            appearsInPlaylist = works.appearsInPlaylist,
+            audios = filterAudios(works.audios, snapshot),
+        )
     }
 
     /**
      * @see MediaDataSource.genre
      */
-    fun genre(genreUri: Uri) = withMediaItemsDataSourceFlow(genreUri) {
-        genre(genreUri)
+    fun genre(genreUri: Uri) = withMediaStoreItemFiltered(
+        uri = genreUri,
+        flowProvider = { withMediaItemsDataSourceFlow(genreUri) { genre(genreUri) } },
+    ) { (genre, content), snapshot ->
+        genre to GenreContent(
+            appearsInAlbums = content.appearsInAlbums.filter {
+                LocalMusicFilter.parseMediaStoreId(it.uri) in snapshot.albumIds
+            },
+            appearsInPlaylists = content.appearsInPlaylists,
+            audios = filterAudios(content.audios, snapshot),
+        )
     }
 
     /**
@@ -430,6 +504,91 @@ class MediaRepository(
     private suspend fun MediaDataSource.isMediaItemCompatible(
         mediaItemUri: Uri
     ) = mediaTypeOf(mediaItemUri) != null
+
+    private fun isMediaStoreUri(uri: Uri) =
+        uri.scheme == ContentResolver.SCHEME_CONTENT && uri.authority == MediaStore.AUTHORITY
+
+    private fun <T> withNavigationMediaStoreFiltered(
+        flowProvider: () -> Flow<Result<T, Error>>,
+        filter: (T, AllowedLocalMediaSnapshot) -> T,
+    ): Flow<Result<T, Error>> = combine(
+        flowProvider(),
+        navigationProvider,
+        musicDirectoriesFlow,
+    ) { result, provider, allowedDirs ->
+        if (provider?.identifier?.type != ProviderType.MEDIASTORE) {
+            result
+        } else {
+            when (result) {
+                is Result.Success -> {
+                    val snapshot = LocalMusicFilter.queryAllowedLocalMedia(
+                        contentResolver,
+                        allowedDirs,
+                    )
+                    Result.Success(filter(result.data, snapshot))
+                }
+
+                is Result.Failure -> result
+            }
+        }
+    }.flowOn(Dispatchers.IO)
+
+    private fun <T> withMediaStoreItemFiltered(
+        uri: Uri,
+        flowProvider: () -> Flow<Result<T, Error>>,
+        filter: (T, AllowedLocalMediaSnapshot) -> T,
+    ): Flow<Result<T, Error>> = if (!isMediaStoreUri(uri)) {
+        flowProvider()
+    } else {
+        combine(
+            flowProvider(),
+            musicDirectoriesFlow,
+        ) { result, allowedDirs ->
+            when (result) {
+                is Result.Success -> {
+                    val snapshot = LocalMusicFilter.queryAllowedLocalMedia(
+                        contentResolver,
+                        allowedDirs,
+                    )
+                    Result.Success(filter(result.data, snapshot))
+                }
+
+                is Result.Failure -> result
+            }
+        }.flowOn(Dispatchers.IO)
+    }
+
+    private fun filterAudios(
+        audios: List<Audio>,
+        snapshot: AllowedLocalMediaSnapshot,
+    ) = audios.filter { audio ->
+        val id = LocalMusicFilter.parseMediaStoreId(audio.playbackUri ?: audio.uri)
+        id == null || id in snapshot.audioIds
+    }
+
+    private fun filterMediaItems(
+        items: List<MediaItem<*>>,
+        snapshot: AllowedLocalMediaSnapshot,
+    ): List<MediaItem<*>> = items.filter { item ->
+        when (item) {
+            is Audio -> {
+                val id = LocalMusicFilter.parseMediaStoreId(item.playbackUri ?: item.uri)
+                id == null || id in snapshot.audioIds
+            }
+
+            is Album -> {
+                val id = LocalMusicFilter.parseMediaStoreId(item.uri)
+                id == null || id in snapshot.albumIds
+            }
+
+            is Artist -> {
+                val id = LocalMusicFilter.parseMediaStoreId(item.uri)
+                id == null || id in snapshot.artistIds
+            }
+
+            else -> true
+        }
+    }
 
     companion object {
         val defaultAlbumsSortingRule = SortingRule(

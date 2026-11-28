@@ -56,12 +56,14 @@ fun AudioDetailsBottomSheet(
     onDismiss: () -> Unit,
 ) {
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val qualityTitle = when {
-        state.isHiRes -> "Hi-Res Lossless"
-        state.isHiFi -> "Hi-Fi Lossless"
-        state.isHq -> "High Quality"
-        else -> "Standard Audio"
-    }
+    val qualityTitle = stringResource(
+        when {
+            state.isHiRes -> R.string.audio_quality_hires
+            state.isHiFi -> R.string.audio_quality_hifi
+            state.isHq -> R.string.audio_quality_hq
+            else -> R.string.audio_quality_standard
+        }
+    )
     val qualityColor = when {
         state.isHiRes -> if (isDark) Color(0xFFFFB300) else Color(0xFFB26A00)
         state.isHiFi -> accentColor

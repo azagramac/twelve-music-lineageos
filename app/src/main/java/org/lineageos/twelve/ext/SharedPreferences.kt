@@ -147,6 +147,16 @@ var SharedPreferences.splitLocalDevices: Boolean
         putBoolean(SPLIT_LOCAL_DEVICES_KEY, value)
     }
 
+const val MUSIC_DIRECTORIES_KEY = "music_directories"
+val MUSIC_DIRECTORIES_DEFAULT = setOf("Music")
+var SharedPreferences.musicDirectories: Set<String>
+    get() = getStringSet(MUSIC_DIRECTORIES_KEY, null)?.toSet() ?: MUSIC_DIRECTORIES_DEFAULT
+    set(value) = edit {
+        putStringSet(MUSIC_DIRECTORIES_KEY, value.toSet())
+    }
+val SharedPreferences.musicDirectoriesFlow
+    get() = preferenceFlow(MUSIC_DIRECTORIES_KEY) { musicDirectories }
+
 // Playback prefs
 private const val TYPED_REPEAT_MODE_KEY = "typed_repeat_mode"
 private val TYPED_REPEAT_MODE_DEFAULT = RepeatMode.NONE.ordinal
