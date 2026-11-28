@@ -106,6 +106,7 @@ class PlaylistFragment : CollapsingToolbarLayoutFragment(R.layout.fragment_playl
                         artistName = item.artistName,
                         durationMs = item.durationMs,
                         mimeType = item.mimeType,
+                        playbackUri = item.playbackUri,
                         onClick = {
                             viewModel.playPlaylist(bindingAdapterPosition)
                         },

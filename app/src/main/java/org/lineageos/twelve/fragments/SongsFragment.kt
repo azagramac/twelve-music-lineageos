@@ -117,6 +117,7 @@ class SongsFragment : Fragment() {
                                             artistName = audio.artistName,
                                             durationMs = audio.durationMs,
                                             mimeType = audio.mimeType,
+                                            playbackUri = audio.playbackUri,
                                             onClick = {
                                                 viewModel.playSong(songs, index)
                                             },

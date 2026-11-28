@@ -35,6 +35,23 @@ object MimeUtils {
         "flac", "alac", "wav", "wave", "aif", "aiff", "dsf", "dff", "wv", "ape", "pcm"
     )
 
+    fun extensionToDisplayName(extension: String): String? =
+        when (val normalized = extension.trim().lowercase()) {
+            "mp3" -> "MP3"
+            "flac" -> "FLAC"
+            "wav", "wave" -> "WAV"
+            "aac", "m4a" -> "AAC"
+            "ogg", "oga" -> "OGG"
+            "opus" -> "OPUS"
+            "wma" -> "WMA"
+            "alac" -> "ALAC"
+            "dsf", "dff" -> "DSD"
+            "aif", "aiff" -> "AIFF"
+            "ape" -> "APE"
+            "wv" -> "WV"
+            else -> normalized.takeIf { it.isNotBlank() && it.length <= 5 }?.uppercase()
+        }
+
     @androidx.annotation.OptIn(UnstableApi::class)
     fun mimeTypeToDisplayName(mimeType: String, codecs: String? = null): String? {
         val normalizedCodecs = codecs?.lowercase().orEmpty()
@@ -47,10 +64,14 @@ object MimeUtils {
             MimeTypes.AUDIO_FLAC, "audio/x-flac" -> "FLAC"
             MimeTypes.AUDIO_ALAC, "audio/x-alac" -> "ALAC"
             MimeTypes.AUDIO_WAV, "audio/x-wav", "audio/vnd.wave" -> "WAV"
-            MimeTypes.AUDIO_AAC, "audio/mp4a-latm" -> "AAC"
+            MimeTypes.AUDIO_AAC, "audio/mp4a-latm", "audio/mp4", "audio/m4a", "audio/x-m4a" -> "AAC"
             MimeTypes.AUDIO_OPUS -> "OPUS"
             MimeTypes.AUDIO_VORBIS -> "OGG"
             MimeTypes.AUDIO_RAW -> "PCM"
+            "audio/x-ms-wma" -> "WMA"
+            "audio/aiff", "audio/x-aiff" -> "AIFF"
+            "audio/ape", "audio/x-ape" -> "APE"
+            "audio/wavpack", "audio/x-wavpack" -> "WV"
             "audio/dsd", "audio/x-dsd" -> "DSD"
 
             else -> it.takeIf { it.contains('/') }

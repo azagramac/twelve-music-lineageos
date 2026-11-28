@@ -143,6 +143,7 @@ class AlbumFragment : CollapsingToolbarLayoutFragment(R.layout.fragment_album) {
                                 artistName = item.audio.artistName,
                                 durationMs = item.audio.durationMs,
                                 mimeType = item.audio.mimeType,
+                                playbackUri = item.audio.playbackUri,
                                 trackNumber = item.audio.trackNumber,
                                 isCurrent = item.isCurrent,
                                 onClick = {

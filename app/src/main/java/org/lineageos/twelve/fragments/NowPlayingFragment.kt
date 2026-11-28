@@ -100,7 +100,9 @@ class NowPlayingFragment : Fragment() {
             val playbackParameters by viewModel.playbackParameters.collectAsState()
             val audioResult by viewModel.audio.collectAsState()
             val isVisualizerEnabled by viewModel.isVisualizerEnabled.collectAsState()
+            val isHiRes by viewModel.isHiRes.collectAsState()
             val isHiFi by viewModel.isHiFi.collectAsState()
+            val isHq by viewModel.isHq.collectAsState()
             val trackFormat by viewModel.trackFormat.collectAsState()
             val trackSampleRateAndBitDepth by viewModel.trackSampleRateAndBitDepth.collectAsState()
             val trackBitrateKbps by viewModel.trackBitrateKbps.collectAsState()
@@ -146,7 +148,9 @@ class NowPlayingFragment : Fragment() {
                 ),
                 isFavorite = currentAudio?.isFavorite,
                 isVisualizerEnabled = isVisualizerEnabled,
+                isHiRes = isHiRes,
                 isHiFi = isHiFi,
+                isHq = isHq,
                 trackFormat = trackFormat,
                 trackSampleRateAndBitDepth = trackSampleRateAndBitDepth,
                 trackBitrateKbps = trackBitrateKbps,

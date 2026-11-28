@@ -6,8 +6,6 @@
 package org.lineageos.twelve.viewmodels
 
 import android.app.Application
-import android.icu.text.DecimalFormat
-import android.icu.text.DecimalFormatSymbols
 import android.os.Bundle
 import androidx.core.net.toUri
 import androidx.lifecycle.viewModelScope
@@ -31,8 +29,6 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
-import java.util.Locale
-import kotlin.math.roundToInt
 import me.bogerchan.niervisualizer.renderer.IRenderer
 import me.bogerchan.niervisualizer.renderer.circle.CircleBarRenderer
 import me.bogerchan.niervisualizer.renderer.circle.CircleRenderer
@@ -64,9 +60,11 @@ import org.lineageos.twelve.models.RepeatMode
 import org.lineageos.twelve.models.Result
 import org.lineageos.twelve.services.PlaybackService
 import org.lineageos.twelve.services.PlaybackService.CustomCommand.Companion.sendCustomCommand
+import org.lineageos.twelve.utils.AudioMetadataExtractor
 import org.lineageos.twelve.utils.MimeUtils
 import org.lineageos.twelve.utils.OutputConfigurationUtils
 import org.lineageos.twelve.utils.OutputConfigurationUtils.toModel
+import org.lineageos.twelve.utils.TrackAudioSpecs
 
 @androidx.annotation.OptIn(UnstableApi::class)
 open class NowPlayingViewModel(application: Application) : TwelveViewModel(application) {
@@ -455,116 +453,187 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
             initialValue = null
         )
 
-    /**
-     * Reactive Hi-Fi track format label (e.g., "FLAC", "AAC", "WAV", "ALAC").
-     */
-    val trackFormat: StateFlow<String?> = displayFileType
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val extractedTrackSpecs: StateFlow<TrackAudioSpecs?> = combine(
+        audio,
+        mediaItem,
+    ) { audioResult, mediaItem ->
+        val resolvedAudio = audioResult.getOrNull()
+        val uri = resolvedAudio?.playbackUri ?: mediaItem?.localConfiguration?.uri
+        val mime = resolvedAudio?.mimeType ?: mediaItem?.localConfiguration?.mimeType
+        val durationMs = resolvedAudio?.durationMs
+        Triple(uri, mime, durationMs)
+    }
+        .flatMapLatest { (uri, mime, durationMs) ->
+            if (uri == null && mime == null) {
+                flowOf<TrackAudioSpecs?>(null)
+            } else {
+                flow<TrackAudioSpecs?> {
+                    emit(
+                        AudioMetadataExtractor.extract(
+                            context = applicationContext,
+                            uri = uri,
+                            mimeType = mime,
+                            durationMs = durationMs,
+                            deepExtract = true,
+                        )
+                    )
+                }
+            }
+        }
+        .flowOn(Dispatchers.IO)
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null,
+        )
 
     /**
-     * Reactive Hi-Fi track bitrate in kbps (e.g., 912).
+     * Unified track audio specs combining ExoPlayer telemetry with deep file extraction
+     * (MediaStore bitrate/size/duration fallback + MediaMetadataRetriever + MediaExtractor).
      */
-    val trackBitrateKbps: StateFlow<Int?> = combine(
+    val trackAudioSpecs: StateFlow<TrackAudioSpecs> = combine(
         effectiveFormat,
         outputConfiguration,
-    ) { format, config ->
-        val rawBps = config?.source?.averageBitrateBps?.takeIf { it > 0 }
+        extractedTrackSpecs,
+        mimeType,
+        audio,
+    ) { format, config, extracted, mime, audioResult ->
+        val formatModel = format?.toModel()
+        val formatDisplayName = format?.let { f ->
+            (f.sampleMimeType ?: f.containerMimeType)?.let {
+                MimeUtils.mimeTypeToDisplayName(it, f.codecs)
+            }
+        }
+        val resolvedFormat = when {
+            extracted?.format == "ALAC" -> "ALAC"
+            !formatDisplayName.isNullOrBlank() -> formatDisplayName
+            !extracted?.format.isNullOrBlank() -> extracted.format
+            else -> mime?.let { MimeUtils.mimeTypeToDisplayName(it, format?.codecs) }
+        }
+
+        val sampleRateHz = config?.source?.sampleRateHz
+            ?: format?.sampleRate?.takeIf { it > 0 }
+            ?: extracted?.sampleRateHz
+            ?: config?.transcoding?.sampleRateHz
+
+        val bitDepth = config?.source?.bitDepth
+            ?: format?.pcmEncoding?.let { OutputConfigurationUtils.pcmEncodingBitDepth(it) }
+            ?: extracted?.bitDepth
+            ?: config?.transcoding?.bitDepth
+
+        val channels = config?.source?.channelCount
+            ?: format?.channelCount?.takeIf { it > 0 }
+        val pcmFallbackBps = if (sampleRateHz != null && channels != null && bitDepth != null) {
+            (sampleRateHz.toLong() * channels * bitDepth).toInt().takeIf { it > 0 }
+        } else {
+            null
+        }
+
+        val bitrateBps = config?.source?.averageBitrateBps?.takeIf { it > 0 }
             ?: config?.source?.peakBitrateBps?.takeIf { it > 0 }
             ?: format?.averageBitrate?.takeIf { it > 0 }
             ?: format?.peakBitrate?.takeIf { it > 0 }
             ?: format?.bitrate?.takeIf { it > 0 }
+            ?: extracted?.bitrateBps?.takeIf { it > 0 }
             ?: config?.transcoding?.bitrateBps?.takeIf { it > 0 }
+            ?: pcmFallbackBps
 
-        when {
-            rawBps != null -> (rawBps / 1000f).roundToInt()
-            else -> {
-                val sampleRate = config?.source?.sampleRateHz ?: format?.sampleRate?.takeIf { it > 0 }
-                val channels = config?.source?.channelCount ?: format?.channelCount?.takeIf { it > 0 }
-                val bitDepth = config?.source?.bitDepth
-                    ?: config?.transcoding?.bitDepth
-                    ?: format?.pcmEncoding?.let { OutputConfigurationUtils.pcmEncodingBitDepth(it) }
-                if (sampleRate != null && channels != null && bitDepth != null) {
-                    (sampleRate.toLong() * channels * bitDepth / 1000L).toInt()
-                } else {
-                    null
-                }
-            }
-        }
-    }
-        .flowOn(Dispatchers.IO)
-        .stateIn(
-            viewModelScope,
-            started = SharingStarted.WhileSubscribed(),
-            initialValue = null
-        )
-
-    /**
-     * Reactive Hi-Fi track sample rate & bit depth formatted string (e.g., "24-bit / 96 kHz").
-     */
-    val trackSampleRateAndBitDepth: StateFlow<String?> = combine(
-        effectiveFormat,
-        outputConfiguration,
-    ) { format, config ->
-        val bitDepth = config?.source?.bitDepth
-            ?: format?.pcmEncoding?.let { OutputConfigurationUtils.pcmEncodingBitDepth(it) }
-            ?: config?.transcoding?.bitDepth
-        val sampleRateHz = config?.source?.sampleRateHz
-            ?: format?.sampleRate?.takeIf { it > 0 }
-            ?: config?.transcoding?.sampleRateHz
-
-        val bitDepthText = bitDepth?.let { "$it-bit" }
-        val sampleRateText = sampleRateHz?.let {
-            "${sampleRateDecimalFormat.format(it / 1000f)} kHz"
-        }
-
-        listOfNotNull(bitDepthText, sampleRateText)
-            .takeIf { it.isNotEmpty() }
-            ?.joinToString(" / ")
-    }
-        .flowOn(Dispatchers.IO)
-        .stateIn(
-            viewModelScope,
-            started = SharingStarted.WhileSubscribed(),
-            initialValue = null
-        )
-
-    /**
-     * Reactive boolean indicating whether the current track qualifies as Hi-Fi
-     * (Lossless format such as FLAC/ALAC/WAV/PCM/DSD or bit depth >= 24-bit).
-     */
-    val isHiFi: StateFlow<Boolean> = combine(
-        outputConfiguration,
-        mimeType,
-        effectiveFormat,
-        audio,
-        mediaItem,
-    ) { config, mime, format, audioResult, mediaItem ->
-        val formatModel = format?.toModel()
         val compression = config?.source?.compression ?: formatModel?.compression
         val isLosslessCompression = compression == OutputConfiguration.Compression.LOSSLESS ||
-            compression == OutputConfiguration.Compression.UNCOMPRESSED
-        val bitDepth = config?.source?.bitDepth
-            ?: formatModel?.bitDepth
-            ?: config?.transcoding?.bitDepth
-            ?: 0
+                compression == OutputConfiguration.Compression.UNCOMPRESSED
         val trackUriString = audioResult.getOrNull()?.playbackUri?.toString()
-            ?: mediaItem?.localConfiguration?.uri?.toString()
+        val isLosslessHint = isLosslessCompression ||
+                extracted?.isHiRes == true ||
+                extracted?.isHiFi == true ||
+                MimeUtils.isLosslessMimeType(mime, format?.codecs, trackUriString)
 
-        isLosslessCompression ||
-            MimeUtils.isLosslessMimeType(mime, format?.codecs, trackUriString) ||
-            bitDepth >= 24
+        AudioMetadataExtractor.classify(
+            format = resolvedFormat,
+            bitrateBps = bitrateBps,
+            sampleRateHz = sampleRateHz,
+            bitDepth = bitDepth,
+            isLosslessHint = isLosslessHint,
+            deepExtracted = extracted?.deepExtracted == true,
+        )
     }
         .flowOn(Dispatchers.IO)
         .stateIn(
             viewModelScope,
             started = SharingStarted.WhileSubscribed(),
-            initialValue = false
+            initialValue = TrackAudioSpecs(),
         )
 
     /**
-     * Returns true if the current playing track is Lossless (FLAC, ALAC, WAV, PCM, DSD)
-     * or has a bit depth >= 24-bit.
+     * Reactive track format label (e.g., "FLAC", "AAC", "WAV", "ALAC").
      */
-    fun isHiFi(): Boolean = isHiFi.value
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val trackFormat: StateFlow<String?> = trackAudioSpecs
+        .mapLatest { it.format }
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null,
+        )
+
+    /**
+     * Reactive track bitrate in kbps (e.g., 912).
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val trackBitrateKbps: StateFlow<Int?> = trackAudioSpecs
+        .mapLatest { it.bitrateKbps }
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null,
+        )
+
+    /**
+     * Reactive track sample rate & bit depth formatted string (e.g., "24-bit / 96 kHz").
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val trackSampleRateAndBitDepth: StateFlow<String?> = trackAudioSpecs
+        .mapLatest { it.sampleRateAndBitDepth }
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = null,
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val isHiRes: StateFlow<Boolean> = trackAudioSpecs
+        .mapLatest { it.isHiRes }
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = false,
+        )
+
+    /**
+     * Reactive boolean indicating whether the current track qualifies as Hi-Fi.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val isHiFi: StateFlow<Boolean> = trackAudioSpecs
+        .mapLatest { it.isHiFi }
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = false,
+        )
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val isHq: StateFlow<Boolean> = trackAudioSpecs
+        .mapLatest { it.isHq }
+        .stateIn(
+            viewModelScope,
+            started = SharingStarted.WhileSubscribed(),
+            initialValue = false,
+        )
+
+    /**
+     * Returns true if the current playing track qualifies as Hi-Fi or Hi-Res.
+     */
+    fun isHiFi(): Boolean = isHiFi.value || isHiRes.value
 
     fun togglePlayPause() {
         mediaController.value?.let {
@@ -615,12 +684,5 @@ open class NowPlayingViewModel(application: Application) : TwelveViewModel(appli
                 mediaRepository.setFavorite(it.uri, !it.isFavorite)
             }
         }
-    }
-
-    companion object {
-        private val sampleRateDecimalFormat = DecimalFormat(
-            "0.#",
-            DecimalFormatSymbols(Locale.ROOT),
-        )
     }
 }
