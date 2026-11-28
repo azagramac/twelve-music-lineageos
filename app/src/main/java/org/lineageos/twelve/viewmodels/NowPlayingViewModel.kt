@@ -68,6 +68,7 @@ import org.lineageos.twelve.utils.MimeUtils
 import org.lineageos.twelve.utils.OutputConfigurationUtils
 import org.lineageos.twelve.utils.OutputConfigurationUtils.toModel
 
+@androidx.annotation.OptIn(UnstableApi::class)
 open class NowPlayingViewModel(application: Application) : TwelveViewModel(application) {
     enum class VisualizerType(val factory: () -> Array<IRenderer>?) {
         NONE({ null }),
