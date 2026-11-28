@@ -46,6 +46,7 @@ fun HiFiMetadataRow(
     sampleRateAndBitDepth: String?,
     bitrateKbps: Int?,
     dynamicBackgroundEnabled: Boolean = true,
+    customActiveColor: Color? = null,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
 ) {
@@ -63,7 +64,7 @@ fun HiFiMetadataRow(
     if (tierName == null && format == null && specsText == null && bitrateText == null) return
 
     val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val dynamicPrimary = MaterialTheme.colorScheme.primary
+    val dynamicPrimary = customActiveColor ?: MaterialTheme.colorScheme.primary
 
     val tierBg = when {
         isHiRes -> {

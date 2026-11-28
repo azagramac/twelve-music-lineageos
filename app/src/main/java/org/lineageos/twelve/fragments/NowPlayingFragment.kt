@@ -100,12 +100,7 @@ class NowPlayingFragment : Fragment() {
             val playbackParameters by viewModel.playbackParameters.collectAsState()
             val audioResult by viewModel.audio.collectAsState()
             val isVisualizerEnabled by viewModel.isVisualizerEnabled.collectAsState()
-            val isHiRes by viewModel.isHiRes.collectAsState()
-            val isHiFi by viewModel.isHiFi.collectAsState()
-            val isHq by viewModel.isHq.collectAsState()
-            val trackFormat by viewModel.trackFormat.collectAsState()
-            val trackSampleRateAndBitDepth by viewModel.trackSampleRateAndBitDepth.collectAsState()
-            val trackBitrateKbps by viewModel.trackBitrateKbps.collectAsState()
+            val trackAudioSpecs by viewModel.trackAudioSpecs.collectAsState()
             val outputConfiguration by viewModel.outputConfiguration.collectAsState()
             val lyricsResult by viewModel.lyricsLines.collectAsState()
 
@@ -123,16 +118,21 @@ class NowPlayingFragment : Fragment() {
             val lyricsList = lyricsPair?.first
 
             val state = NowPlayingUiState(
-                title = (mediaMetadata.displayTitle ?: mediaMetadata.title)?.toString()
+                title = currentAudio?.title
+                    ?: (mediaMetadata.displayTitle ?: mediaMetadata.title)?.toString()
                     ?: getString(R.string.unknown),
-                artist = mediaMetadata.artist?.toString()
+                artist = currentAudio?.artistName
+                    ?: mediaMetadata.artist?.toString()
                     ?: getString(R.string.artist_unknown),
-                album = mediaMetadata.albumTitle?.toString()
+                album = currentAudio?.albumTitle
+                    ?: mediaMetadata.albumTitle?.toString()
                     ?: getString(R.string.album_unknown),
+                genre = currentAudio?.genreName ?: mediaMetadata.genre?.toString(),
+                year = currentAudio?.year ?: mediaMetadata.releaseYear,
                 artwork = artworkThumbnail,
                 isPlaying = isPlaying,
                 isBuffering = playbackState == PlaybackState.BUFFERING,
-                durationMs = durationCurrentPositionMs.first ?: 0L,
+                durationMs = durationCurrentPositionMs.first ?: currentAudio?.durationMs ?: 0L,
                 currentPositionMs = durationCurrentPositionMs.second ?: 0L,
                 shuffleEnabled = shuffleMode,
                 repeatMode = repeatMode,
@@ -148,12 +148,17 @@ class NowPlayingFragment : Fragment() {
                 ),
                 isFavorite = currentAudio?.isFavorite,
                 isVisualizerEnabled = isVisualizerEnabled,
-                isHiRes = isHiRes,
-                isHiFi = isHiFi,
-                isHq = isHq,
-                trackFormat = trackFormat,
-                trackSampleRateAndBitDepth = trackSampleRateAndBitDepth,
-                trackBitrateKbps = trackBitrateKbps,
+                isHiRes = trackAudioSpecs.isHiRes,
+                isHiFi = trackAudioSpecs.isHiFi,
+                isHq = trackAudioSpecs.isHq,
+                trackFormat = trackAudioSpecs.format,
+                trackSampleRateAndBitDepth = trackAudioSpecs.sampleRateAndBitDepth,
+                trackBitrateKbps = trackAudioSpecs.bitrateKbps,
+                sampleRateHz = trackAudioSpecs.sampleRateHz,
+                bitDepth = trackAudioSpecs.bitDepth,
+                channelCount = trackAudioSpecs.channelCount,
+                fileSizeBytes = trackAudioSpecs.fileSizeBytes,
+                fileDisplayName = trackAudioSpecs.displayName,
                 outputDeviceType = outputConfiguration?.device?.type,
                 hasPotentialIssues =
                     outputConfiguration?.verdict?.potentialIssues?.isNotEmpty() == true,

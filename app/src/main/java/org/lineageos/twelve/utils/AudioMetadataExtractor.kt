@@ -31,6 +31,9 @@ data class TrackAudioSpecs(
     val bitrateBps: Int? = null,
     val sampleRateHz: Int? = null,
     val bitDepth: Int? = null,
+    val channelCount: Int? = null,
+    val fileSizeBytes: Long? = null,
+    val displayName: String? = null,
     val isHiRes: Boolean = false,
     val isHiFi: Boolean = false,
     val isHq: Boolean = false,
@@ -81,6 +84,9 @@ object AudioMetadataExtractor {
         bitDepth: Int?,
         isLosslessHint: Boolean = false,
         deepExtracted: Boolean = false,
+        channelCount: Int? = null,
+        fileSizeBytes: Long? = null,
+        displayName: String? = null,
     ): TrackAudioSpecs {
         val normalizedFormat = format?.uppercase()?.takeIf { it.isNotBlank() }
         val isHiRes = ((sampleRateHz ?: 0) >= 48_000 && (bitDepth ?: 0) >= 24) ||
@@ -101,6 +107,9 @@ object AudioMetadataExtractor {
             bitrateBps = bitrateBps,
             sampleRateHz = sampleRateHz,
             bitDepth = bitDepth,
+            channelCount = channelCount,
+            fileSizeBytes = fileSizeBytes,
+            displayName = displayName,
             isHiRes = isHiRes,
             isHiFi = isHiFi,
             isHq = isHq,
@@ -131,6 +140,7 @@ object AudioMetadataExtractor {
             var bitDepth: Int? = null
             var channelCount: Int? = null
             var sizeBytes: Long? = null
+            var displayName: String? = null
             var effectiveDurationMs: Long? = durationMs?.takeIf { it > 0L }
             var resolvedMime: String? = mimeType
 
@@ -166,8 +176,9 @@ object AudioMetadataExtractor {
                                 effectiveDurationMs = cursor.getLong(durationCol).takeIf { it > 0L }
                             }
                             if (nameCol != -1) {
-                                val displayName = cursor.getString(nameCol)
-                                val ext = displayName?.substringAfterLast('.', "")
+                                val resolvedName = cursor.getString(nameCol)?.takeIf { it.isNotBlank() }
+                                displayName = resolvedName
+                                val ext = resolvedName?.substringAfterLast('.', "")
                                 if (!ext.isNullOrBlank()) {
                                     format = MimeUtils.extensionToDisplayName(ext)
                                 }
@@ -182,6 +193,7 @@ object AudioMetadataExtractor {
                     val file = File(path)
                     if (file.exists()) {
                         sizeBytes = file.length().takeIf { it > 0L }
+                        displayName = file.name.takeIf { it.isNotBlank() }
                         val ext = file.extension
                         if (ext.isNotBlank()) {
                             format = MimeUtils.extensionToDisplayName(ext)
@@ -359,6 +371,9 @@ object AudioMetadataExtractor {
                 bitDepth = bitDepth,
                 isLosslessHint = isLosslessHint,
                 deepExtracted = shouldDeepExtract,
+                channelCount = channelCount,
+                fileSizeBytes = knownSizeBytes,
+                displayName = displayName,
             )
 
             if (cacheKey != null) {
