@@ -23,8 +23,56 @@ jobs:
           fetch-depth: 0
 
       - name: 🏷️ Resolve Release Version
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          V="0.1.${{ github.run_number }}"
+          V=$(python3 - "$BASE_SHA" "$HEAD_SHA" << 'EOF'
+          import re
+          import subprocess
+          import sys
+
+          base_sha, head_sha = sys.argv[1], sys.argv[2]
+
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True, errors="replace").strip()
+
+          tags = git("tag", "--list", "v[0-9]*.[0-9]*.[0-9]*", "--sort=-v:refname").splitlines()
+          last_tag = tags[0] if tags else None
+
+          if last_tag:
+              major, minor, patch = map(int, last_tag.lstrip("v").split(".")[:3])
+              log_range = f"{last_tag}..HEAD"
+          else:
+              major, minor, patch = 0, 1, 0
+              log_range = f"{base_sha}..{head_sha}" if base_sha and head_sha else "HEAD"
+
+          raw = git("log", log_range, "--no-merges", "--pretty=format:%s%n%b%x1e")
+          bump = "patch"
+          for entry in raw.split("\x1e"):
+              entry = entry.strip()
+              if not entry:
+                  continue
+              subject = entry.splitlines()[0]
+              if re.match(r"^[a-zA-Z0-9_-]+(!(\([^)]+\))?|(\([^)]+\))!):", subject) or re.search(r"^(BREAKING CHANGE|MAJOR):", entry, re.M):
+                  bump = "major"
+                  break
+              if re.match(r"^feat(\([^)]+\))?:", subject):
+                  bump = "minor"
+
+          if bump == "major":
+              major += 1
+              minor = 0
+              patch = 0
+          elif bump == "minor":
+              minor += 1
+              patch = 0
+          else:
+              patch += 1
+
+          print(f"{major}.{minor}.{patch}")
+          EOF
+          )
           echo "VERSION=$V" >> "$GITHUB_ENV"
           echo "TAG=v$V" >> "$GITHUB_ENV"
           echo "📌 Resolved version: v$V"
@@ -38,7 +86,7 @@ jobs:
       - name: 🤖 Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: "platforms;android-36 build-tools;36.0.0"
+          packages: "platforms;android-37.0 build-tools;37.0.0"
 
       # Twelve uses AGP 9 + Gradle 9.3.1 (gradle/wrapper), so the wrapper is used
       # instead of pinning a Gradle version.
