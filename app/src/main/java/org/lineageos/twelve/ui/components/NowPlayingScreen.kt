@@ -131,7 +131,7 @@ data class NowPlayingCallbacks(
 )
 
 /**
- * Lune-inspired Material 3 Expressive Now Playing screen featuring a dynamic blurred album art
+ *Material 3 Expressive Now Playing screen featuring a dynamic blurred album art
  * backdrop, crisp centered hierarchy, prominent Hi-Fi badge & telemetry, wavy progress indicator,
  * springy transport controls with haptics, and `Nier-Visualizer` [SurfaceView] encapsulation.
  */
@@ -216,7 +216,7 @@ fun NowPlayingScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                // Crisp Lune-style rounded square album artwork + optional Nier-Visualizer
+                // Crisp rounded square album artwork + optional Nier-Visualizer
                 Surface(
                     modifier = Modifier
                         .widthIn(max = 360.dp)
@@ -383,7 +383,7 @@ fun NowPlayingScreen(
                     onSeekToPosition = callbacks.onSeekToPosition,
                 )
 
-                // Centered Lune-style transport controls with morphing Play/Pause & haptics
+                // Centered transport controls with morphing Play/Pause & haptics
                 val playButtonShape = rememberMorphingShape(
                     from = TwelveMorphShapes.Circle,
                     to = TwelveMorphShapes.Square,
@@ -668,7 +668,7 @@ fun NowPlayingScreen(
 }
 
 /**
- * Dynamic ambient defocus backdrop inspired by Lune: blurs the playing album artwork with
+ * Dynamic ambient defocus backdrop inspired by: blurs the playing album artwork with
  * hardware RenderEffect on API 31+ (with a smooth tonal gradient fallback on API 30 / empty art)
  * and layers a soft vertical scrim for crisp contrast.
  */

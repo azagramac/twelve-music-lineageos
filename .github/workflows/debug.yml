@@ -37,7 +37,7 @@ jobs:
       - name: 🤖 Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
-          packages: "platforms;android-36 build-tools;36.0.0"
+          packages: "platforms;android-37.0 build-tools;37.0.0"
 
       # Twelve uses AGP 9 + Gradle 9.3.1 (gradle/wrapper), so the wrapper is used
       # instead of pinning a Gradle version.
@@ -77,14 +77,60 @@ jobs:
           fi
           echo "✅ Debug keystore loaded from GitHub Secrets."
 
+      - name: 🏷️ Resolve Debug Version
+        run: |
+          V=$(python3 - << 'EOF'
+          import re
+          import subprocess
+
+          def git(*args):
+              return subprocess.check_output(["git", *args], text=True, errors="replace").strip()
+
+          tags = git("tag", "--list", "v[0-9]*.[0-9]*.[0-9]*", "--sort=-v:refname").splitlines()
+          last_tag = tags[0] if tags else None
+
+          if last_tag:
+              major, minor, patch = map(int, last_tag.lstrip("v").split(".")[:3])
+              log_range = f"{last_tag}..HEAD"
+          else:
+              major, minor, patch = 0, 1, 0
+              log_range = "-n 1 HEAD"
+
+          raw = git("log", log_range, "--no-merges", "--pretty=format:%s%n%b%x1e")
+          bump = "patch"
+          for entry in raw.split("\x1e"):
+              entry = entry.strip()
+              if not entry:
+                  continue
+              subject = entry.splitlines()[0]
+              if re.match(r"^[a-zA-Z0-9_-]+(!(\([^)]+\))?|(\([^)]+\))!):", subject) or re.search(r"^(BREAKING CHANGE|MAJOR):", entry, re.M):
+                  bump = "major"
+                  break
+              if re.match(r"^feat(\([^)]+\))?:", subject):
+                  bump = "minor"
+
+          if bump == "major":
+              major += 1
+              minor = 0
+              patch = 0
+          elif bump == "minor":
+              minor += 1
+              patch = 0
+          else:
+              patch += 1
+
+          print(f"{major}.{minor}.{patch}")
+          EOF
+          )
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          echo "📌 Resolved debug version: v$V"
+
       - name: 🛠️ Build Debug APK
         env:
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ env.KEY_ALIAS || secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          VERSION="0.1.0"
-          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           ./gradlew assembleDebug -PversionName="$VERSION" -PversionCode="${{ github.run_number }}" --stacktrace
 
       - name: 📦 Prepare Debug Artifacts & SHA-256 Checksums
