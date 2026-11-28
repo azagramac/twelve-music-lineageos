@@ -14,6 +14,22 @@ import android.widget.LinearLayout
 import androidx.activity.BackEventCompat
 import androidx.activity.OnBackPressedCallback
 import androidx.annotation.IdRes
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.core.graphics.Insets
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -33,7 +49,6 @@ import androidx.viewpager2.widget.ViewPager2
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.navigation.NavigationBarView
-import com.google.android.material.progressindicator.LinearProgressIndicator
 import com.google.android.material.search.SearchView
 import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.flow.collectLatest
@@ -45,7 +60,6 @@ import org.lineageos.twelve.ext.isLandscape
 import org.lineageos.twelve.ext.isRtl
 import org.lineageos.twelve.ext.navigateSafe
 import org.lineageos.twelve.ext.scheduleHideSoftInput
-import org.lineageos.twelve.ext.setProgressCompat
 import org.lineageos.twelve.ext.updatePadding
 import org.lineageos.twelve.models.Album
 import org.lineageos.twelve.models.Artist
@@ -57,7 +71,10 @@ import org.lineageos.twelve.models.Playlist
 import org.lineageos.twelve.models.Result.Companion.onError
 import org.lineageos.twelve.models.areContentsTheSame
 import org.lineageos.twelve.models.areItemsTheSame
+import org.lineageos.twelve.ui.components.ExpressiveLinearWavyLoadingBar
+import org.lineageos.twelve.ui.haptics.rememberTwelveHaptics
 import org.lineageos.twelve.ui.recyclerview.SimpleListAdapter
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 import org.lineageos.twelve.ui.views.ListItem
 import org.lineageos.twelve.viewmodels.MainViewModel
 
@@ -69,16 +86,20 @@ class MainFragment : Fragment(R.layout.fragment_main) {
     private val viewModel by viewModels<MainViewModel>()
 
     // Views
-    private val navigationBarView by getViewProperty<NavigationBarView>(R.id.navigationBarView)
-    private val playRandomSongsButton by getViewProperty<MaterialButton>(R.id.playRandomSongsButton)
+    private val navigationBarComposeView by getViewProperty<ComposeView?>(R.id.navigationBarComposeView)
+    private val navigationBarView by getViewProperty<NavigationBarView?>(R.id.navigationBarView)
+    private val playRandomSongsComposeView by getViewProperty<ComposeView>(R.id.playRandomSongsComposeView)
     private val providerMaterialButton by getViewProperty<MaterialButton>(R.id.providerMaterialButton)
-    private val searchLinearProgressIndicator by getViewProperty<LinearProgressIndicator>(R.id.searchLinearProgressIndicator)
+    private val searchLoadingComposeView by getViewProperty<ComposeView>(R.id.searchLoadingComposeView)
     private val searchNoElementsLinearLayout by getViewProperty<LinearLayout>(R.id.searchNoElementsLinearLayout)
     private val searchRecyclerView by getViewProperty<RecyclerView>(R.id.searchRecyclerView)
     private val searchView by getViewProperty<SearchView>(R.id.searchView)
     private val settingsMaterialButton by getViewProperty<MaterialButton>(R.id.settingsMaterialButton)
     private val toolbar by getViewProperty<MaterialToolbar>(R.id.toolbar)
     private val viewPager2 by getViewProperty<ViewPager2>(R.id.viewPager2)
+
+    private var selectedPageIndex by mutableIntStateOf(0)
+    private var isSearchLoading by mutableStateOf(false)
 
     // System services
     private val inputMethodManager: InputMethodManager
@@ -185,19 +206,21 @@ class MainFragment : Fragment(R.layout.fragment_main) {
             windowInsets
         }
 
-        ViewCompat.setOnApplyWindowInsetsListener(navigationBarView) { v, windowInsets ->
-            val insets = windowInsets.getInsets(
-                WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
-            )
+        navigationBarView?.let { navView ->
+            ViewCompat.setOnApplyWindowInsetsListener(navView) { v, windowInsets ->
+                val insets = windowInsets.getInsets(
+                    WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
+                )
 
-            v.updatePadding(
-                insets,
-                start = resources.configuration.isLandscape,
-                top = resources.configuration.isLandscape,
-                bottom = true,
-            )
+                v.updatePadding(
+                    insets,
+                    start = resources.configuration.isLandscape,
+                    top = resources.configuration.isLandscape,
+                    bottom = true,
+                )
 
-            windowInsets
+                windowInsets
+            }
         }
 
         ViewCompat.setOnApplyWindowInsetsListener(viewPager2) { v, windowInsets ->
@@ -318,16 +341,38 @@ class MainFragment : Fragment(R.layout.fragment_main) {
             startActivity(intent)
         }
 
-        playRandomSongsButton.setOnClickListener {
-            viewLifecycleOwner.lifecycleScope.launch {
-                viewModel.playAllAudios().onError {
-                    Snackbar.make(
-                        navigationBarView,
-                        it.toString(),
-                        Snackbar.LENGTH_SHORT,
-                    ).show()
-                }
-            }
+        playRandomSongsComposeView.setTwelveExpressiveContent {
+            val haptics = rememberTwelveHaptics()
+            @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+            ExtendedFloatingActionButton(
+                onClick = {
+                    haptics.click()
+                    viewLifecycleOwner.lifecycleScope.launch {
+                        viewModel.playAllAudios().onError {
+                            Snackbar.make(
+                                requireView(),
+                                it.toString(),
+                                Snackbar.LENGTH_SHORT,
+                            ).show()
+                        }
+                    }
+                },
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_shuffle_play),
+                        contentDescription = null,
+                    )
+                },
+                text = {
+                    Text(
+                        text = stringResource(R.string.play_random_songs),
+                        style = MaterialTheme.typography.labelLargeEmphasized,
+                    )
+                },
+                shape = CircleShape,
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+            )
         }
 
         // View pager
@@ -338,7 +383,7 @@ class MainFragment : Fragment(R.layout.fragment_main) {
         }
         viewPager2.offscreenPageLimit = Page.entries.size
 
-        navigationBarView.setOnItemSelectedListener { item ->
+        navigationBarView?.setOnItemSelectedListener { item ->
             if (item.itemId == R.id.searchFragment) {
                 searchView.show()
                 return@setOnItemSelectedListener false
@@ -347,10 +392,75 @@ class MainFragment : Fragment(R.layout.fragment_main) {
             val index = Page.entries.indexOfFirst { it.menuItemId == item.itemId }
 
             if (index >= 0) {
+                selectedPageIndex = index
                 viewPager2.currentItem = index
                 true
             } else {
                 false
+            }
+        }
+
+        navigationBarComposeView?.setTwelveExpressiveContent {
+            val haptics = rememberTwelveHaptics()
+            NavigationBar(
+                tonalElevation = 2.dp,
+            ) {
+                NavigationBarItem(
+                    selected = selectedPageIndex == 0,
+                    onClick = {
+                        haptics.click()
+                        selectedPageIndex = 0
+                        viewPager2.currentItem = 0
+                    },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_home),
+                            contentDescription = null,
+                        )
+                    },
+                    label = {
+                        Text(stringResource(R.string.main_fragment_section_activity))
+                    },
+                )
+                NavigationBarItem(
+                    selected = false,
+                    onClick = {
+                        haptics.click()
+                        searchView.show()
+                    },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_search),
+                            contentDescription = null,
+                        )
+                    },
+                    label = {
+                        Text(stringResource(R.string.main_fragment_section_search))
+                    },
+                )
+                NavigationBarItem(
+                    selected = selectedPageIndex == 1,
+                    onClick = {
+                        haptics.click()
+                        selectedPageIndex = 1
+                        viewPager2.currentItem = 1
+                    },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_shelves),
+                            contentDescription = null,
+                        )
+                    },
+                    label = {
+                        Text(stringResource(R.string.main_fragment_section_library))
+                    },
+                )
+            }
+        }
+
+        searchLoadingComposeView.setTwelveExpressiveContent {
+            if (isSearchLoading) {
+                ExpressiveLinearWavyLoadingBar()
             }
         }
 
@@ -383,7 +493,8 @@ class MainFragment : Fragment(R.layout.fragment_main) {
 
                 launch {
                     viewModel.searchResults.collectLatest {
-                        searchLinearProgressIndicator.setProgressCompat(it)
+                        isSearchLoading = it is FlowResult.Loading
+                        searchLoadingComposeView.isVisible = isSearchLoading
 
                         when (it) {
                             is FlowResult.Loading -> {

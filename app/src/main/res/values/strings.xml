@@ -22,6 +22,7 @@
     <string name="search_hint">Search…</string>
 
     <!-- Library fragment menus -->
+    <string name="library_fragment_menu_songs">Songs</string>
     <string name="library_fragment_menu_albums">Albums</string>
     <string name="library_fragment_menu_artists">Artists</string>
     <string name="library_fragment_menu_genres">Genres</string>
@@ -35,6 +36,7 @@
 
     <!-- No elements -->
     <string name="no_activity">No activity</string>
+    <string name="no_songs">No songs</string>
     <string name="no_albums">No albums</string>
     <string name="no_artists">No artists</string>
     <string name="no_genres">No genres</string>
@@ -197,8 +199,22 @@
     <string name="title_activity_settings">Settings</string>
 
     <!-- Preference titles -->
+    <string name="settings_appearance_header">Appearance &amp; Theme</string>
+    <string name="settings_audio_header">Hi-Fi Audio Engine</string>
+    <string name="settings_library_header">Library &amp; Behavior</string>
     <string name="general_header">General</string>
     <string name="experimental_header">Experimental</string>
+
+    <!-- Appearance preferences -->
+    <string name="theme_mode">Theme</string>
+    <string name="theme_mode_system">System</string>
+    <string name="theme_mode_light">Light</string>
+    <string name="theme_mode_dark">Dark</string>
+    <string name="theme_mode_amoled">AMOLED</string>
+    <string name="dynamic_color">Dynamic color</string>
+    <string name="dynamic_color_summary">Adapt app accents from your wallpaper on Android 12+</string>
+    <string name="dynamic_background">Dynamic player background</string>
+    <string name="dynamic_background_summary">Render a softly blurred album artwork backdrop in Now Playing</string>
 
     <!-- General preferences -->
     <string name="fullscreen_mode">Fullscreen mode</string>

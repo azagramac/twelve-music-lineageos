@@ -36,10 +36,9 @@
 
     </LinearLayout>
 
-    <com.google.android.material.progressindicator.LinearProgressIndicator
-        android:id="@+id/linearProgressIndicator"
+    <androidx.compose.ui.platform.ComposeView
+        android:id="@+id/loadingComposeView"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:indeterminate="true" />
+        android:layout_height="wrap_content" />
 
 </FrameLayout>

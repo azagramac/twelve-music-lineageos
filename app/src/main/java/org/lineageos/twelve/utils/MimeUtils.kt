@@ -23,11 +23,26 @@ object MimeUtils {
         MimeTypes.AUDIO_TRUEHD,
         "audio/dsd",
         "audio/x-dsd",
+        "audio/aiff",
+        "audio/x-aiff",
+        "audio/ape",
+        "audio/x-ape",
+        "audio/wavpack",
+        "audio/x-wavpack",
+    )
+
+    private val losslessExtensions = setOf(
+        "flac", "alac", "wav", "wave", "aif", "aiff", "dsf", "dff", "wv", "ape", "pcm"
     )
 
     @androidx.annotation.OptIn(UnstableApi::class)
-    fun mimeTypeToDisplayName(mimeType: String) =
-        when (val it = MimeTypes.normalizeMimeType(mimeType)) {
+    fun mimeTypeToDisplayName(mimeType: String, codecs: String? = null): String? {
+        val normalizedCodecs = codecs?.lowercase().orEmpty()
+        if (normalizedCodecs.contains("alac")) return "ALAC"
+        if (normalizedCodecs.contains("flac")) return "FLAC"
+        if (normalizedCodecs.contains("mlp") || normalizedCodecs.contains("truehd")) return "TRUEHD"
+
+        return when (val it = MimeTypes.normalizeMimeType(mimeType)) {
             MimeTypes.AUDIO_MPEG -> "MP3"
             MimeTypes.AUDIO_FLAC, "audio/x-flac" -> "FLAC"
             MimeTypes.AUDIO_ALAC, "audio/x-alac" -> "ALAC"
@@ -43,17 +58,47 @@ object MimeUtils {
                 ?.removePrefix("x-")
                 ?.uppercase()
         }
+    }
 
     @androidx.annotation.OptIn(UnstableApi::class)
-    fun isLosslessMimeType(mimeType: String?): Boolean {
-        mimeType ?: return false
-        val normalized = MimeTypes.normalizeMimeType(mimeType).lowercase()
-        return normalized in losslessMimeTypes ||
-            normalized.contains("flac") ||
-            normalized.contains("alac") ||
-            normalized.contains("wav") ||
-            normalized.contains("dsd") ||
-            normalized.contains("pcm")
+    fun isLosslessMimeType(
+        mimeType: String?,
+        codecs: String? = null,
+        uriString: String? = null,
+    ): Boolean {
+        val normalizedCodecs = codecs?.lowercase().orEmpty()
+        if (
+            normalizedCodecs.contains("alac") ||
+            normalizedCodecs.contains("flac") ||
+            normalizedCodecs.contains("pcm") ||
+            normalizedCodecs.contains("dsd") ||
+            normalizedCodecs.contains("truehd")
+        ) {
+            return true
+        }
+
+        if (mimeType != null) {
+            val normalized = MimeTypes.normalizeMimeType(mimeType).lowercase()
+            if (
+                normalized in losslessMimeTypes ||
+                normalized.contains("flac") ||
+                normalized.contains("alac") ||
+                normalized.contains("wav") ||
+                normalized.contains("aiff") ||
+                normalized.contains("dsd") ||
+                normalized.contains("pcm") ||
+                normalized.contains("lossless")
+            ) {
+                return true
+            }
+        }
+
+        val ext = uriString
+            ?.substringBefore('?')
+            ?.substringBefore('#')
+            ?.substringAfterLast('.', "")
+            ?.lowercase()
+        return ext in losslessExtensions
     }
 
     fun mimeTypeToMediaType(mimeType: String) = when {

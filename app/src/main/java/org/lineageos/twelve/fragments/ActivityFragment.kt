@@ -9,6 +9,10 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.LinearLayout
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.ComposeView
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
@@ -19,13 +23,11 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.progressindicator.LinearProgressIndicator
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import org.lineageos.twelve.R
 import org.lineageos.twelve.ext.getViewProperty
 import org.lineageos.twelve.ext.navigateSafe
-import org.lineageos.twelve.ext.setProgressCompat
 import org.lineageos.twelve.ext.updatePadding
 import org.lineageos.twelve.models.ActivityTab
 import org.lineageos.twelve.models.Album
@@ -34,8 +36,10 @@ import org.lineageos.twelve.models.Audio
 import org.lineageos.twelve.models.FlowResult
 import org.lineageos.twelve.models.Genre
 import org.lineageos.twelve.models.Playlist
+import org.lineageos.twelve.ui.components.ExpressiveLinearWavyLoadingBar
 import org.lineageos.twelve.ui.recyclerview.SimpleListAdapter
 import org.lineageos.twelve.ui.recyclerview.UniqueItemDiffCallback
+import org.lineageos.twelve.ui.theme.setTwelveExpressiveContent
 import org.lineageos.twelve.ui.views.ActivityTabView
 import org.lineageos.twelve.utils.PermissionsChecker
 import org.lineageos.twelve.utils.PermissionsUtils
@@ -49,9 +53,11 @@ class ActivityFragment : Fragment(R.layout.fragment_activity) {
     private val viewModel by viewModels<ActivityViewModel>()
 
     // Views
-    private val linearProgressIndicator by getViewProperty<LinearProgressIndicator>(R.id.linearProgressIndicator)
+    private val loadingComposeView by getViewProperty<ComposeView>(R.id.loadingComposeView)
     private val noElementsLinearLayout by getViewProperty<LinearLayout>(R.id.noElementsLinearLayout)
     private val recyclerView by getViewProperty<RecyclerView>(R.id.recyclerView)
+
+    private var isLoading by mutableStateOf(true)
 
     // RecyclerView
     private val adapter by lazy {
@@ -123,6 +129,11 @@ class ActivityFragment : Fragment(R.layout.fragment_activity) {
         }
 
         recyclerView.adapter = adapter
+        loadingComposeView.setTwelveExpressiveContent {
+            if (isLoading) {
+                ExpressiveLinearWavyLoadingBar()
+            }
+        }
 
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -141,7 +152,8 @@ class ActivityFragment : Fragment(R.layout.fragment_activity) {
 
     private suspend fun loadData() {
         viewModel.activity.collectLatest {
-            linearProgressIndicator.setProgressCompat(it)
+            isLoading = it is FlowResult.Loading
+            loadingComposeView.isVisible = isLoading
 
             when (it) {
                 is FlowResult.Loading -> {
